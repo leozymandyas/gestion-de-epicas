@@ -208,12 +208,46 @@ var YaExisteError = class extends Error {
 };
 var CARPETA_ACTIVAS = "\xC9picas";
 var CARPETA_INACTIVAS = "\xC9picas archivadas";
+var CARPETA_HISTORIAS = "historias";
+var CARPETA_HISTORIAS_LEGACY = "funcionalidades";
+function nombreCarpetaHistorias(epicaFolder) {
+  const tiene = (n) => epicaFolder.children.some((c) => c instanceof import_obsidian.TFolder && c.name === n);
+  if (tiene(CARPETA_HISTORIAS))
+    return CARPETA_HISTORIAS;
+  if (tiene(CARPETA_HISTORIAS_LEGACY))
+    return CARPETA_HISTORIAS_LEGACY;
+  return CARPETA_HISTORIAS;
+}
 function carpetasGestionListas(app) {
   return app.vault.getAbstractFileByPath((0, import_obsidian.normalizePath)(CARPETA_ACTIVAS)) instanceof import_obsidian.TFolder && app.vault.getAbstractFileByPath((0, import_obsidian.normalizePath)(CARPETA_INACTIVAS)) instanceof import_obsidian.TFolder;
 }
 async function crearCarpetasGestion(app) {
   await ensureFolder(app, CARPETA_ACTIVAS);
   await ensureFolder(app, CARPETA_INACTIVAS);
+}
+async function migrarCarpetasHistorias(app) {
+  const epicas = [
+    ...listFuncionalidades(app, CARPETA_ACTIVAS),
+    ...listFuncionalidades(app, CARPETA_INACTIVAS)
+  ];
+  for (const ep of epicas) {
+    const legacy = ep.folder.children.find(
+      (c) => c instanceof import_obsidian.TFolder && c.name === CARPETA_HISTORIAS_LEGACY
+    );
+    const yaNueva = ep.folder.children.some(
+      (c) => c instanceof import_obsidian.TFolder && c.name === CARPETA_HISTORIAS
+    );
+    if (legacy && !yaNueva) {
+      try {
+        await app.fileManager.renameFile(
+          legacy,
+          (0, import_obsidian.normalizePath)(`${ep.folder.path}/${CARPETA_HISTORIAS}`)
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }
 }
 function claveRelativa(adminPath, path) {
   const prefijo = (0, import_obsidian.normalizePath)(adminPath) + "/";
@@ -285,7 +319,7 @@ function listFuncionalidades(app, adminPath) {
 function listFuncionalidadesDe(app, epicaFolder) {
   var _a;
   const dir = epicaFolder.children.find(
-    (c) => c instanceof import_obsidian.TFolder && c.name === "funcionalidades"
+    (c) => c instanceof import_obsidian.TFolder && (c.name === CARPETA_HISTORIAS || c.name === CARPETA_HISTORIAS_LEGACY)
   );
   if (!dir)
     return [];
@@ -311,8 +345,9 @@ function listFuncionalidadesDe(app, epicaFolder) {
 }
 async function createFuncionalidadEn(app, epica, nombre) {
   const slug = slugify(nombre);
-  await ensureFolder(app, `${epica.folder.path}/funcionalidades`);
-  const fnPath = (0, import_obsidian.normalizePath)(`${epica.folder.path}/funcionalidades/${slug}`);
+  const carpeta = nombreCarpetaHistorias(epica.folder);
+  await ensureFolder(app, `${epica.folder.path}/${carpeta}`);
+  const fnPath = (0, import_obsidian.normalizePath)(`${epica.folder.path}/${carpeta}/${slug}`);
   if (app.vault.getAbstractFileByPath(fnPath))
     throw new YaExisteError();
   await app.vault.createFolder(fnPath);
@@ -739,7 +774,7 @@ async function renombrarTipoIncidencia(app, adminPath, anterior, nuevo) {
   }
 }
 async function moverHistoriaAEpica(app, historia, destino) {
-  const destDir = `${destino.folder.path}/funcionalidades`;
+  const destDir = `${destino.folder.path}/${nombreCarpetaHistorias(destino.folder)}`;
   await ensureFolder(app, destDir);
   const nuevoSlug = slugCarpetaLibre(app, destDir, historia.slug);
   if (nuevoSlug !== historia.slug) {
@@ -5056,6 +5091,7 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
   }
   async onload() {
     await this.loadSettings();
+    this.app.workspace.onLayoutReady(() => void migrarCarpetasHistorias(this.app));
     (0, import_obsidian13.addIcon)(ICONO_PLUGIN, ICONO_PLUGIN_SVG);
     this.addSettingTab(new GestorSettingTab(this.app, this));
     registerDashboard(this);

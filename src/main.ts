@@ -20,6 +20,7 @@ import {
 	guardarEtiquetasEpica,
 	leerEtiquetasEpica,
 	listFuncionalidades,
+	migrarCarpetasHistorias,
 	renombrarColaborador,
 	renombrarEtiquetaHistoria,
 	renombrarEtiquetaSprint,
@@ -75,6 +76,9 @@ export default class GestorFuncionesPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+
+		// Migra la carpeta heredada "funcionalidades" → "historias" en cada épica.
+		this.app.workspace.onLayoutReady(() => void migrarCarpetasHistorias(this.app));
 
 		addIcon(ICONO_PLUGIN, ICONO_PLUGIN_SVG);
 

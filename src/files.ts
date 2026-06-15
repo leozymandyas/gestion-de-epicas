@@ -100,6 +100,21 @@ export class YaExisteError extends Error {}
 export const CARPETA_ACTIVAS = "Épicas";
 export const CARPETA_INACTIVAS = "Épicas archivadas";
 
+/** Carpeta dentro de cada épica que contiene sus historias. */
+export const CARPETA_HISTORIAS = "historias";
+/** Nombre heredado de esa carpeta (se migra a "historias"). */
+export const CARPETA_HISTORIAS_LEGACY = "funcionalidades";
+
+/** Nombre de la carpeta de historias a usar en una épica: la nueva si existe, la
+ * heredada si aún no se ha migrado, o la nueva por defecto. */
+function nombreCarpetaHistorias(epicaFolder: TFolder): string {
+	const tiene = (n: string) =>
+		epicaFolder.children.some((c) => c instanceof TFolder && c.name === n);
+	if (tiene(CARPETA_HISTORIAS)) return CARPETA_HISTORIAS;
+	if (tiene(CARPETA_HISTORIAS_LEGACY)) return CARPETA_HISTORIAS_LEGACY;
+	return CARPETA_HISTORIAS;
+}
+
 export function carpetasGestionListas(app: App): boolean {
 	return (
 		app.vault.getAbstractFileByPath(normalizePath(CARPETA_ACTIVAS)) instanceof TFolder &&
@@ -110,6 +125,34 @@ export function carpetasGestionListas(app: App): boolean {
 export async function crearCarpetasGestion(app: App): Promise<void> {
 	await ensureFolder(app, CARPETA_ACTIVAS);
 	await ensureFolder(app, CARPETA_INACTIVAS);
+}
+
+/** Migra la carpeta de historias heredada ("funcionalidades") a "historias" en
+ * cada épica (activas y archivadas). Renombra con `renameFile` para conservar
+ * los enlaces internos. Es idempotente: no hace nada si ya está migrada. */
+export async function migrarCarpetasHistorias(app: App): Promise<void> {
+	const epicas = [
+		...listFuncionalidades(app, CARPETA_ACTIVAS),
+		...listFuncionalidades(app, CARPETA_INACTIVAS),
+	];
+	for (const ep of epicas) {
+		const legacy = ep.folder.children.find(
+			(c): c is TFolder => c instanceof TFolder && c.name === CARPETA_HISTORIAS_LEGACY
+		);
+		const yaNueva = ep.folder.children.some(
+			(c) => c instanceof TFolder && c.name === CARPETA_HISTORIAS
+		);
+		if (legacy && !yaNueva) {
+			try {
+				await app.fileManager.renameFile(
+					legacy,
+					normalizePath(`${ep.folder.path}/${CARPETA_HISTORIAS}`)
+				);
+			} catch (e) {
+				console.error(e);
+			}
+		}
+	}
 }
 
 /** Clave de data.json: ruta relativa a la carpeta de épicas, sin extensión .md. */
@@ -214,7 +257,9 @@ export function listFuncionalidades(app: App, adminPath: string): FuncRef[] {
  */
 export function listFuncionalidadesDe(app: App, epicaFolder: TFolder): FuncRef[] {
 	const dir = epicaFolder.children.find(
-		(c): c is TFolder => c instanceof TFolder && c.name === "funcionalidades"
+		(c): c is TFolder =>
+			c instanceof TFolder &&
+			(c.name === CARPETA_HISTORIAS || c.name === CARPETA_HISTORIAS_LEGACY)
 	);
 	if (!dir) return [];
 	const out: FuncRef[] = [];
@@ -242,8 +287,9 @@ export async function createFuncionalidadEn(
 	nombre: string
 ): Promise<TFile> {
 	const slug = slugify(nombre);
-	await ensureFolder(app, `${epica.folder.path}/funcionalidades`);
-	const fnPath = normalizePath(`${epica.folder.path}/funcionalidades/${slug}`);
+	const carpeta = nombreCarpetaHistorias(epica.folder);
+	await ensureFolder(app, `${epica.folder.path}/${carpeta}`);
+	const fnPath = normalizePath(`${epica.folder.path}/${carpeta}/${slug}`);
 	if (app.vault.getAbstractFileByPath(fnPath)) throw new YaExisteError();
 	await app.vault.createFolder(fnPath);
 	return app.vault.create(
@@ -815,7 +861,7 @@ export async function moverHistoriaAEpica(
 	historia: FuncRef,
 	destino: FuncRef
 ): Promise<void> {
-	const destDir = `${destino.folder.path}/funcionalidades`;
+	const destDir = `${destino.folder.path}/${nombreCarpetaHistorias(destino.folder)}`;
 	await ensureFolder(app, destDir);
 	const nuevoSlug = slugCarpetaLibre(app, destDir, historia.slug);
 	if (nuevoSlug !== historia.slug) {
