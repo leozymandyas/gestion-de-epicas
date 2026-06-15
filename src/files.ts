@@ -153,6 +153,30 @@ export async function migrarCarpetasHistorias(app: App): Promise<void> {
 			}
 		}
 	}
+
+	// Corrige el `tipo` heredado de las historias ("funcionalidad" → "historia").
+	// Solo afecta a las notas de historia (dentro de la carpeta de historias), no
+	// a las notas de épica.
+	const epicas2 = [
+		...listFuncionalidades(app, CARPETA_ACTIVAS),
+		...listFuncionalidades(app, CARPETA_INACTIVAS),
+	];
+	for (const ep of epicas2) {
+		for (const h of listFuncionalidadesDe(app, ep.folder)) {
+			const tipo = (
+				app.metadataCache.getFileCache(h.file)?.frontmatter as Record<string, unknown> | undefined
+			)?.tipo;
+			if (tipo === "funcionalidad") {
+				try {
+					await app.fileManager.processFrontMatter(h.file, (fm: Record<string, unknown>) => {
+						fm.tipo = "historia";
+					});
+				} catch (e) {
+					console.error(e);
+				}
+			}
+		}
+	}
 }
 
 /** Clave de data.json: ruta relativa a la carpeta de épicas, sin extensión .md. */

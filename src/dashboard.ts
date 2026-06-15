@@ -13,8 +13,11 @@ const SECCIONES_GESTIONADAS = ["Tareas", "Pendientes"];
 export function registerDashboard(plugin: GestorFuncionesPlugin): void {
 	plugin.registerMarkdownPostProcessor((el, ctx) => {
 		const fm = plugin.app.metadataCache.getCache(ctx.sourcePath)?.frontmatter;
-		// Las épicas nuevas usan tipo: epica; las anteriores conservan tipo: funcionalidad.
-		if (!fm || (fm.tipo !== "epica" && fm.tipo !== "funcionalidad")) return;
+		// Épicas: tipo: epica. Historias: tipo: historia (antes "funcionalidad",
+		// que algunas épicas/historias heredadas aún conservan).
+		if (!fm || (fm.tipo !== "epica" && fm.tipo !== "funcionalidad" && fm.tipo !== "historia")) {
+			return;
+		}
 
 		const h2 = el.querySelector("h2");
 		const titulo = h2?.textContent?.trim() ?? "";

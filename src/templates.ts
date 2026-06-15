@@ -14,7 +14,7 @@ ${cuerpoSecciones(nombre)}`;
  * vínculo a su épica y estado propio. */
 export function funcionalidadNueva(nombre: string, epicaSlug: string, fecha: string): string {
 	return `---
-tipo: funcionalidad
+tipo: historia
 epica: "[[${epicaSlug}]]"
 nombre: "${escapeYaml(nombre)}"
 estado: backlog

@@ -56,7 +56,7 @@ ${cuerpoSecciones(nombre)}`;
 }
 function funcionalidadNueva(nombre, epicaSlug, fecha) {
   return `---
-tipo: funcionalidad
+tipo: historia
 epica: "[[${epicaSlug}]]"
 nombre: "${escapeYaml(nombre)}"
 estado: backlog
@@ -226,6 +226,7 @@ async function crearCarpetasGestion(app) {
   await ensureFolder(app, CARPETA_INACTIVAS);
 }
 async function migrarCarpetasHistorias(app) {
+  var _a, _b;
   const epicas = [
     ...listFuncionalidades(app, CARPETA_ACTIVAS),
     ...listFuncionalidades(app, CARPETA_INACTIVAS)
@@ -245,6 +246,24 @@ async function migrarCarpetasHistorias(app) {
         );
       } catch (e) {
         console.error(e);
+      }
+    }
+  }
+  const epicas2 = [
+    ...listFuncionalidades(app, CARPETA_ACTIVAS),
+    ...listFuncionalidades(app, CARPETA_INACTIVAS)
+  ];
+  for (const ep of epicas2) {
+    for (const h of listFuncionalidadesDe(app, ep.folder)) {
+      const tipo = (_b = (_a = app.metadataCache.getFileCache(h.file)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b.tipo;
+      if (tipo === "funcionalidad") {
+        try {
+          await app.fileManager.processFrontMatter(h.file, (fm) => {
+            fm.tipo = "historia";
+          });
+        } catch (e) {
+          console.error(e);
+        }
       }
     }
   }
@@ -1718,8 +1737,9 @@ function registerDashboard(plugin) {
   plugin.registerMarkdownPostProcessor((el, ctx) => {
     var _a, _b, _c;
     const fm = (_a = plugin.app.metadataCache.getCache(ctx.sourcePath)) == null ? void 0 : _a.frontmatter;
-    if (!fm || fm.tipo !== "epica" && fm.tipo !== "funcionalidad")
+    if (!fm || fm.tipo !== "epica" && fm.tipo !== "funcionalidad" && fm.tipo !== "historia") {
       return;
+    }
     const h2 = el.querySelector("h2");
     const titulo = (_c = (_b = h2 == null ? void 0 : h2.textContent) == null ? void 0 : _b.trim()) != null ? _c : "";
     if (h2 && SECCIONES_GESTIONADAS.includes(titulo)) {
