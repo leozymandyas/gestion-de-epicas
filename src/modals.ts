@@ -374,21 +374,48 @@ export class EditarNombreModal extends GestorModal {
 		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
 		const epica = this.campoEpica(funcs);
 		const fn = this.campoFuncionalidad(epica);
+
+		// Selector opcional de incidencia: si se elige, se renombra la incidencia.
+		const incCampo = this.campoSelect("Incidencia (opcional)", "Toda la épica/historia");
+		let incidencias: files.Incidencia[] = [];
+		const repoblarInc = () => {
+			const base = fn.getFn() ?? epica.getFunc();
+			incidencias = base
+				? files.listIncidencias(this.app, base, this.plugin.settings.incidencias)
+				: [];
+			this.setOpciones(
+				incCampo.select,
+				"Toda la épica/historia",
+				incidencias.map((i, idx) => ({ value: String(idx), label: `${i.tipoNombre}: ${i.nombre}` }))
+			);
+			incCampo.select.dispatchEvent(new Event("change"));
+		};
+
 		const nombre = this.campoTexto("Nuevo nombre", "Escribe el nuevo nombre");
 
-		const objetivo = (): files.FuncRef | null => fn.getFn() ?? epica.getFunc() ?? null;
+		const incSeleccionada = (): files.Incidencia | null => {
+			const v = incCampo.select.value;
+			return v === "" ? null : incidencias[Number(v)] ?? null;
+		};
 		const sincronizar = () => {
-			const o = objetivo();
+			const inc = incSeleccionada();
+			if (inc) {
+				nombre.input.value = inc.nombre;
+				return;
+			}
+			const o = fn.getFn() ?? epica.getFunc();
 			nombre.input.value = o ? o.nombre : "";
 		};
-		epica.select.addEventListener("change", sincronizar);
-		fn.select.addEventListener("change", sincronizar);
-		sincronizar();
+		epica.select.addEventListener("change", repoblarInc);
+		fn.select.addEventListener("change", repoblarInc);
+		incCampo.select.addEventListener("change", sincronizar);
+		repoblarInc();
 
 		this.botones(async () => {
 			this.limpiarError(epica);
 			this.limpiarError(nombre);
-			const o = objetivo();
+			const inc = incSeleccionada();
+			const o = fn.getFn() ?? epica.getFunc() ?? null;
 			const valor = nombre.input.value.trim();
 			if (!o) {
 				this.mostrarError(epica, MSG_OBLIGATORIO);
@@ -399,12 +426,161 @@ export class EditarNombreModal extends GestorModal {
 				return;
 			}
 			try {
-				await files.renombrarFuncionalidad(this.app, o, valor);
+				if (inc) await files.renombrarIncidencia(this.app, inc.file, valor);
+				else await files.renombrarFuncionalidad(this.app, o, valor);
 				new Notice("Gestión de épicas: nombre actualizado.");
 				this.close();
 			} catch (e) {
 				console.error(e);
 				new Notice("Gestión de épicas: no se pudo renombrar.");
+			}
+		}, "Guardar");
+
+		if (funcs.length === 0) this.sinEpicas(epica);
+	}
+}
+
+/** Mueve una historia a otra épica (arrastra sus incidencias). */
+export class MoverHistoriaModal extends GestorModal {
+	onOpen(): void {
+		this.titleEl.setText("Mover historia");
+		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+		const epica = this.campoEpica(funcs);
+		const fn = this.campoFuncionalidad(epica);
+
+		const destino = this.campoSelect("Mover a la épica", "Seleccionar épica destino");
+		this.setOpciones(
+			destino.select,
+			"Seleccionar épica destino",
+			funcs.map((f) => ({ value: f.slug, label: f.nombre }))
+		);
+
+		this.botones(async () => {
+			this.limpiarError(fn);
+			this.limpiarError(destino);
+			const hist = fn.getFn();
+			const dest = funcs.find((f) => f.slug === destino.select.value) ?? null;
+			if (!hist) {
+				this.mostrarError(fn, "Selecciona la historia a mover.");
+				return;
+			}
+			if (!dest) {
+				this.mostrarError(destino, MSG_OBLIGATORIO);
+				return;
+			}
+			if (dest.slug === epica.getFunc()?.slug) {
+				this.mostrarError(destino, "La historia ya pertenece a esa épica.");
+				return;
+			}
+			try {
+				await files.moverHistoriaAEpica(this.app, hist, dest);
+				new Notice("Gestión de épicas: historia movida.");
+				this.close();
+			} catch (e) {
+				console.error(e);
+				new Notice("Gestión de épicas: no se pudo mover la historia.");
+			}
+		}, "Mover");
+
+		if (funcs.length === 0) this.sinEpicas(epica);
+	}
+}
+
+/** Editar una incidencia: cambiar su tipo y/o moverla a otra épica/historia. */
+export class MoverIncidenciaModal extends GestorModal {
+	onOpen(): void {
+		this.titleEl.setText("Editar incidencia");
+		this.modalEl.addClass("gf-modal-sprints");
+		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+
+		// Origen: épica → historia → incidencia.
+		const epica = this.campoEpica(funcs);
+		const fn = this.campoFuncionalidad(epica);
+		const incCampo = this.campoSelect("Incidencia", "Seleccionar incidencia");
+		let incidencias: files.Incidencia[] = [];
+		const repoblarInc = () => {
+			const base = fn.getFn() ?? epica.getFunc();
+			incidencias = base
+				? files.listIncidencias(this.app, base, this.plugin.settings.incidencias)
+				: [];
+			this.setOpciones(
+				incCampo.select,
+				"Seleccionar incidencia",
+				incidencias.map((i, idx) => ({ value: String(idx), label: `${i.tipoNombre}: ${i.nombre}` }))
+			);
+			incCampo.select.dispatchEvent(new Event("change"));
+		};
+		epica.select.addEventListener("change", repoblarInc);
+		fn.select.addEventListener("change", repoblarInc);
+		repoblarInc();
+
+		const incSel = (): files.Incidencia | null => {
+			const v = incCampo.select.value;
+			return v === "" ? null : incidencias[Number(v)] ?? null;
+		};
+
+		// Nuevo tipo (precargado con el tipo actual de la incidencia).
+		const tipo = this.campoSelect("Nuevo tipo", "Seleccionar tipo");
+		this.setOpciones(
+			tipo.select,
+			"Seleccionar tipo",
+			this.plugin.settings.incidencias.map((i) => ({ value: i.nombre, label: i.nombre }))
+		);
+		incCampo.select.addEventListener("change", () => {
+			const i = incSel();
+			if (i) tipo.select.value = i.tipoNombre;
+		});
+
+		// Destino: épica → historia (opcional).
+		const destEpica = this.campoSelect("Mover a la épica", "Seleccionar épica");
+		this.setOpciones(
+			destEpica.select,
+			"Seleccionar épica",
+			funcs.map((f) => ({ value: f.slug, label: f.nombre }))
+		);
+		const destFn = this.campoSelect("Historia destino (opcional)", "Nivel épica");
+		let destHist: files.FuncRef[] = [];
+		const repoblarDest = () => {
+			const e = funcs.find((f) => f.slug === destEpica.select.value);
+			destHist = e ? files.listFuncionalidadesDe(this.app, e.folder) : [];
+			this.setOpciones(
+				destFn.select,
+				"Nivel épica",
+				destHist.map((h) => ({ value: h.slug, label: h.nombre }))
+			);
+		};
+		destEpica.select.addEventListener("change", repoblarDest);
+		repoblarDest();
+
+		this.botones(async () => {
+			this.limpiarError(incCampo);
+			this.limpiarError(tipo);
+			this.limpiarError(destEpica);
+			const i = incSel();
+			const origen = fn.getFn() ?? epica.getFunc() ?? null;
+			const destE = funcs.find((f) => f.slug === destEpica.select.value) ?? null;
+			const destH = destHist.find((h) => h.slug === destFn.select.value) ?? null;
+			const destFunc = destH ?? destE;
+			const nuevoTipo = tipo.select.value;
+			if (!i || !origen) {
+				this.mostrarError(incCampo, "Selecciona la incidencia.");
+				return;
+			}
+			if (!destFunc) {
+				this.mostrarError(destEpica, MSG_OBLIGATORIO);
+				return;
+			}
+			if (!nuevoTipo) {
+				this.mostrarError(tipo, MSG_OBLIGATORIO);
+				return;
+			}
+			try {
+				await files.moverIncidencia(this.app, i.file, origen, destFunc, nuevoTipo);
+				new Notice("Gestión de épicas: incidencia actualizada.");
+				this.close();
+			} catch (e) {
+				console.error(e);
+				new Notice("Gestión de épicas: no se pudo actualizar la incidencia.");
 			}
 		}, "Guardar");
 
@@ -1410,6 +1586,18 @@ export class AsignarColaboradorModal extends GestorModal {
 			// Con funcionalidad elegida se listan solo sus incidencias; sin ella,
 			// las de nivel épica más las de todas sus funcionalidades.
 			const seleccionFn = fn.getFn();
+
+			// Primera fila: asignar a la propia épica/historia (su nota principal).
+			const objetivoPrincipal = seleccionFn ?? f;
+			const filaPpal = listaWrap.createDiv({ cls: "gf-sprint-fila" });
+			const cabPpal = filaPpal.createDiv({ cls: "gf-sprint-cabecera" });
+			const chkPpal = cabPpal.createEl("input", { type: "checkbox" });
+			cabPpal.createEl("span", {
+				text: seleccionFn ? `Historia: ${seleccionFn.nombre}` : `Épica: ${f.nombre}`,
+				cls: "gf-sprint-nombre",
+			});
+			this.filas.push({ file: objetivoPrincipal.file, chk: chkPpal });
+
 			const tipos = this.plugin.settings.incidencias;
 			const filtrar = (incs: files.Incidencia[]) =>
 				tipoFiltro ? incs.filter((i) => i.tipoNombre === tipoFiltro) : incs;
@@ -1436,7 +1624,6 @@ export class AsignarColaboradorModal extends GestorModal {
 						? "Esta historia no tiene incidencias aún."
 						: "Esta épica no tiene incidencias aún.",
 				});
-				return;
 			}
 			for (const grupo of grupos) {
 				for (const inc of grupo.incidencias) {

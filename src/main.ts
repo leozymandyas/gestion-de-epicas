@@ -45,6 +45,8 @@ import {
 	CrearTareaModal,
 	EditarNombreModal,
 	MoverEpicaModal,
+	MoverHistoriaModal,
+	MoverIncidenciaModal,
 } from "./modals";
 import { GestorEtiquetasModal } from "./etiquetas-modal";
 
@@ -61,7 +63,9 @@ export type TipoModal =
 	| "asignarEtiquetas"
 	| "configIncidencias"
 	| "incidencia"
-	| "editarNombre";
+	| "editarNombre"
+	| "moverHistoria"
+	| "editarIncidencia";
 
 export default class GestorFuncionesPlugin extends Plugin {
 	settings: GestorSettings = DEFAULT_SETTINGS;
@@ -150,6 +154,16 @@ export default class GestorFuncionesPlugin extends Plugin {
 			id: "editar-nombre",
 			name: "Editar nombre de épica o historia",
 			callback: () => this.abrirModal("editarNombre"),
+		});
+		this.addCommand({
+			id: "mover-historia",
+			name: "Mover historia a otra épica",
+			callback: () => this.abrirModal("moverHistoria"),
+		});
+		this.addCommand({
+			id: "editar-incidencia",
+			name: "Editar incidencia (tipo / mover)",
+			callback: () => this.abrirModal("editarIncidencia"),
 		});
 		this.addCommand({
 			id: "mover-epica",
@@ -282,6 +296,12 @@ export default class GestorFuncionesPlugin extends Plugin {
 				break;
 			case "editarNombre":
 				new EditarNombreModal(this).open();
+				break;
+			case "moverHistoria":
+				new MoverHistoriaModal(this).open();
+				break;
+			case "editarIncidencia":
+				new MoverIncidenciaModal(this).open();
 				break;
 		}
 	}

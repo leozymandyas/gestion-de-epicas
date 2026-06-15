@@ -3,6 +3,7 @@ import type GestorFuncionesPlugin from "./main";
 import {
 	FuncRef,
 	carpetasGestionListas,
+	getAsignados,
 	guardarSprintHistoria,
 	leerEtiquetasEpica,
 	leerEtiquetasHistoria,
@@ -23,6 +24,8 @@ interface CardHist {
 	nombre: string;
 	/** Nombres de las etiquetas asignadas a la historia. */
 	etiquetas: string[];
+	/** Colaboradores asignados a la historia (nombres). */
+	colaboradores: string[];
 	/** Sprint asignado para el año visible (null = sin sprint). */
 	sprint: number | null;
 }
@@ -122,6 +125,7 @@ export class GestorFuncionalidadesView extends ItemView {
 				file: h.file,
 				nombre: h.nombre,
 				etiquetas: leerEtiquetasHistoria(this.app, h.file),
+				colaboradores: getAsignados(this.app, h.file),
 				sprint,
 			});
 		}
@@ -273,6 +277,10 @@ export class GestorFuncionalidadesView extends ItemView {
 		}
 	}
 
+	private colorColab(nombre: string): string {
+		return this.plugin.settings.colaboradores.find((c) => c.nombre === nombre)?.color ?? "#B9BEC6";
+	}
+
 	private renderTarjeta(cuerpo: HTMLElement, card: CardHist, sprintCol: number | null): void {
 		const el = cuerpo.createDiv({ cls: "gf-kanban-card" });
 		el.draggable = true;
@@ -300,11 +308,14 @@ export class GestorFuncionalidadesView extends ItemView {
 		});
 
 		el.createDiv({ cls: "gf-kanban-card-nombre", text: card.nombre });
-		if (card.etiquetas.length > 0) {
+		if (card.etiquetas.length > 0 || card.colaboradores.length > 0) {
 			const chips = el.createDiv({ cls: "gf-kanban-card-chips" });
 			for (const n of card.etiquetas) {
 				const color = this.etiquetasEpica.find((e) => e.nombre === n)?.color ?? "#B9BEC6";
 				renderChipEtiqueta(chips, n, color);
+			}
+			for (const c of card.colaboradores) {
+				renderChipEtiqueta(chips, c, this.colorColab(c));
 			}
 		}
 

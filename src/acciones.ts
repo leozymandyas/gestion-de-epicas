@@ -27,6 +27,7 @@ const REGISTRO: Accion[] = [
 	{ id: "etiquetas-epica", icono: "tags", texto: "Configurar etiquetas", accion: (p) => p.abrirModal("etiquetasEpica") },
 	{ id: "asignar-etiquetas", icono: "tag", texto: "Etiquetar historias", accion: (p) => p.abrirModal("asignarEtiquetas") },
 	{ id: "editar-nombre", icono: "pencil", texto: "Editar nombre", accion: (p) => p.abrirModal("editarNombre") },
+	{ id: "mover-historia", icono: "folder-symlink", texto: "Mover historia", accion: (p) => p.abrirModal("moverHistoria") },
 	{ id: "archivar-epica", icono: "archive", texto: "Archivar épicas", accion: (p) => p.abrirModal("mover") },
 	// Épicas — tableros
 	{ id: "roadmap", icono: "map", texto: "Roadmap", accion: (p) => void p.abrirRoadmap() },
@@ -34,6 +35,7 @@ const REGISTRO: Accion[] = [
 	// Incidencias
 	{ id: "configurar-incidencias", icono: "settings-2", texto: "Configurar incidencias", accion: (p) => p.abrirModal("configIncidencias") },
 	{ id: "crear-incidencia", icono: "circle-dot", texto: "Crear incidencia", accion: (p) => p.abrirModal("incidencia") },
+	{ id: "editar-incidencia", icono: "replace", texto: "Editar incidencia", accion: (p) => p.abrirModal("editarIncidencia") },
 	// Colaboradores
 	{ id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
 	{ id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
@@ -46,9 +48,9 @@ const POR_ID = new Map(REGISTRO.map((a) => [a.id, a]));
 
 /** Estructura de secciones del panel; `fija` = no se puede ocultar. */
 const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }> = [
-	{ id: "epicas-admin", titulo: "Administración", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas", "editar-nombre", "archivar-epica"] },
+	{ id: "epicas-admin", titulo: "Administración", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas", "editar-nombre", "mover-historia", "archivar-epica"] },
 	{ id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
-	{ id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia"] },
+	{ id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia", "editar-incidencia"] },
 	{ id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
 	{ id: "incidencias-tableros", titulo: "Tableros", acciones: ["gestion-incidencias", "incidencias-por-colaborador"] },
 ];

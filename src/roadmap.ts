@@ -3,6 +3,7 @@ import type GestorFuncionesPlugin from "./main";
 import {
 	EtiquetaSprint,
 	FuncRef,
+	getAsignados,
 	leerSprints,
 	listFuncionalidades,
 	listFuncionalidadesDe,
@@ -178,6 +179,19 @@ export class RoadmapView extends ItemView {
 			e.preventDefault();
 			void this.app.workspace.getLeaf(false).openFile(fila.ref.file);
 		});
+
+		// Colaboradores asignados a la épica/historia (su nota principal).
+		const colabs = getAsignados(this.app, fila.ref.file).filter((n) =>
+			this.plugin.settings.colaboradores.some((c) => c.nombre === n && c.visible !== false)
+		);
+		if (colabs.length > 0) {
+			const chips = tdNombre.createDiv({ cls: "gf-roadmap-colabs" });
+			for (const c of colabs) {
+				const color =
+					this.plugin.settings.colaboradores.find((x) => x.nombre === c)?.color ?? "#B9BEC6";
+				renderChipEtiqueta(chips, c, color);
+			}
+		}
 
 		for (let n = this.desde; n <= this.hasta; n++) {
 			const td = tr.createEl("td", { cls: "gf-roadmap-celda" });

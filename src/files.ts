@@ -578,9 +578,37 @@ export function listTodasFunc(app: App, adminPath: string): FuncRef[] {
 	return out;
 }
 
-/** Renombra una épica/historia: actualiza el `nombre` del frontmatter y el primer
- * encabezado H1 de su nota principal. El slug (carpeta) no cambia, para no romper
- * los enlaces internos que lo referencian. */
+/** Reemplaza el primer encabezado H1 de una nota por `# nuevoNombre`. */
+async function actualizarH1(app: App, file: TFile, nuevoNombre: string): Promise<void> {
+	await app.vault.process(file, (content) => {
+		const lines = content.split("\n");
+		const i = lines.findIndex((l) => /^#\s+/.test(l));
+		if (i !== -1) lines[i] = `# ${nuevoNombre}`;
+		return lines.join("\n");
+	});
+}
+
+/** Devuelve un slug de carpeta libre dentro de `dir` (sufijo -2, -3…). */
+function slugCarpetaLibre(app: App, dir: string, slug: string): string {
+	const existe = (s: string) => !!app.vault.getAbstractFileByPath(normalizePath(`${dir}/${s}`));
+	if (!existe(slug)) return slug;
+	let n = 2;
+	while (existe(`${slug}-${n}`)) n++;
+	return `${slug}-${n}`;
+}
+
+/** Devuelve un nombre de archivo .md libre dentro de `dir` (sufijo -2, -3…). */
+function slugArchivoLibre(app: App, dir: string, slug: string): string {
+	const existe = (s: string) => !!app.vault.getAbstractFileByPath(normalizePath(`${dir}/${s}.md`));
+	if (!existe(slug)) return slug;
+	let n = 2;
+	while (existe(`${slug}-${n}`)) n++;
+	return `${slug}-${n}`;
+}
+
+/** Renombra una épica/historia: actualiza el `nombre`/H1 y también la carpeta y
+ * la nota principal (slug) para que coincidan con el nuevo nombre. Usa
+ * `renameFile`, que actualiza los enlaces internos que apuntan a ellas. */
 export async function renombrarFuncionalidad(
 	app: App,
 	ref: FuncRef,
@@ -589,12 +617,32 @@ export async function renombrarFuncionalidad(
 	await app.fileManager.processFrontMatter(ref.file, (fm: Record<string, unknown>) => {
 		fm.nombre = nuevoNombre;
 	});
-	await app.vault.process(ref.file, (content) => {
-		const lines = content.split("\n");
-		const i = lines.findIndex((l) => /^#\s+/.test(l));
-		if (i !== -1) lines[i] = `# ${nuevoNombre}`;
-		return lines.join("\n");
+	await actualizarH1(app, ref.file, nuevoNombre);
+
+	const parent = ref.folder.parent;
+	const deseado = slugify(nuevoNombre);
+	if (!parent || !deseado || deseado === ref.slug) return;
+	const nuevoSlug = slugCarpetaLibre(app, parent.path, deseado);
+	// Primero la nota principal (se mueve con la carpeta al renombrarla después).
+	await app.fileManager.renameFile(ref.file, normalizePath(`${ref.folder.path}/${nuevoSlug}.md`));
+	await app.fileManager.renameFile(ref.folder, normalizePath(`${parent.path}/${nuevoSlug}`));
+}
+
+/** Renombra una incidencia: actualiza `nombre`/H1 y el archivo .md (slug). */
+export async function renombrarIncidencia(
+	app: App,
+	file: TFile,
+	nuevoNombre: string
+): Promise<void> {
+	await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+		fm.nombre = nuevoNombre;
 	});
+	await actualizarH1(app, file, nuevoNombre);
+	const dir = file.parent;
+	const deseado = slugify(nuevoNombre);
+	if (!dir || !deseado || deseado === file.basename) return;
+	const nuevo = slugArchivoLibre(app, dir.path, deseado);
+	await app.fileManager.renameFile(file, normalizePath(`${dir.path}/${nuevo}.md`));
 }
 
 /** Reemplaza el encabezado `## anterior` por `## nuevo` en una nota. */
@@ -747,4 +795,71 @@ export async function renombrarTipoIncidencia(
 			}
 		}
 	}
+}
+
+// ===== Mover historias e incidencias =====
+
+/** Mueve una historia a otra épica: traslada su carpeta (con sus incidencias) a
+ * `<destino>/funcionalidades/` y actualiza su referencia `epica`. */
+export async function moverHistoriaAEpica(
+	app: App,
+	historia: FuncRef,
+	destino: FuncRef
+): Promise<void> {
+	const destDir = `${destino.folder.path}/funcionalidades`;
+	await ensureFolder(app, destDir);
+	const nuevoSlug = slugCarpetaLibre(app, destDir, historia.slug);
+	if (nuevoSlug !== historia.slug) {
+		await app.fileManager.renameFile(
+			historia.file,
+			normalizePath(`${historia.folder.path}/${nuevoSlug}.md`)
+		);
+	}
+	await app.fileManager.renameFile(historia.folder, normalizePath(`${destDir}/${nuevoSlug}`));
+	await app.fileManager.processFrontMatter(historia.file, (fm: Record<string, unknown>) => {
+		fm.epica = `[[${destino.slug}]]`;
+	});
+}
+
+/** Quita del cuerpo de una nota las líneas que enlazan a `[[base]]`/`[[base|…]]`. */
+async function quitarLineaConEnlace(app: App, file: TFile, base: string): Promise<void> {
+	await app.vault.process(file, (content) => {
+		const lines = content.split("\n");
+		return lines
+			.filter((l) => !l.includes(`[[${base}]]`) && !l.includes(`[[${base}|`))
+			.join("\n");
+	});
+}
+
+/** Cambia el tipo de una incidencia y/o la mueve a otra épica/historia: traslada
+ * el .md a la carpeta del tipo destino dentro de la func destino, actualiza
+ * `tipo`/`funcionalidad` y los índices de las notas principales. */
+export async function moverIncidencia(
+	app: App,
+	incFile: TFile,
+	origen: FuncRef,
+	destino: FuncRef,
+	nuevoTipoNombre: string
+): Promise<void> {
+	const fm = app.metadataCache.getFileCache(incFile)?.frontmatter as
+		| Record<string, unknown>
+		| undefined;
+	const nombre = fm?.nombre ? String(fm.nombre) : incFile.basename;
+	const oldBase = incFile.basename;
+
+	// Quita la incidencia del índice de su nota de origen.
+	await quitarLineaConEnlace(app, origen.file, oldBase);
+
+	const nuevoSlug = slugify(nuevoTipoNombre);
+	const destDir = `${destino.folder.path}/${nuevoSlug}`;
+	await ensureFolder(app, destDir);
+	const base = slugArchivoLibre(app, destDir, oldBase);
+	await app.fileManager.renameFile(incFile, normalizePath(`${destDir}/${base}.md`));
+	await app.fileManager.processFrontMatter(incFile, (fm2: Record<string, unknown>) => {
+		fm2.tipo = nuevoSlug;
+		fm2.funcionalidad = `[[${destino.slug}]]`;
+	});
+
+	// Agrega la incidencia al índice de la nota destino, en la sección de su tipo.
+	await appendToSection(app, destino.file, `## ${nuevoTipoNombre}`, `- [ ] [[${base}|${nombre}]]`);
 }

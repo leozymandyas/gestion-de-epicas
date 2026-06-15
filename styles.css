@@ -1180,6 +1180,14 @@
 	white-space: nowrap;
 }
 
+/* Chips de colaboradores bajo el nombre de la épica/historia en el roadmap. */
+.gf-roadmap-colabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 3px;
+	margin-top: 3px;
+}
+
 .gf-roadmap-epica .internal-link {
 	cursor: pointer;
 }

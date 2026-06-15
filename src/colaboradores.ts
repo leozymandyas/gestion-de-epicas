@@ -86,8 +86,11 @@ export class TareasColaboradorView extends ItemView {
 	}
 
 	private async recolectar(): Promise<void> {
+		// Solo se consideran los colaboradores activos (con el check marcado).
+		const visibles = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
+		const nombresVisibles = new Set(visibles.map((c) => c.nombre));
 		this.porColaborador = new Map<string, IncidenciaAsignada[]>();
-		for (const colab of this.plugin.settings.colaboradores) {
+		for (const colab of visibles) {
 			this.porColaborador.set(colab.nombre, []);
 		}
 		this.sinAsignar = [];
@@ -112,7 +115,9 @@ export class TareasColaboradorView extends ItemView {
 					this.sinAsignar.push({ ...inc, epica: origen });
 					continue;
 				}
+				// Las asignaciones a colaboradores desactivados se ignoran.
 				for (const nombre of asignados) {
+					if (!nombresVisibles.has(nombre)) continue;
 					const lista = this.porColaborador.get(nombre) ?? [];
 					lista.push({ ...inc, epica: origen });
 					this.porColaborador.set(nombre, lista);
