@@ -1,4 +1,4 @@
-# Gestión de Épicas
+# Gestion de epicas
 
 **Plugin de Obsidian para Product Owners, Product Managers y equipos ágiles** que gestionan el desarrollo de producto a través de épicas. Concentra en un solo lugar toda la información que necesitas: historias, sprints, tareas, pendientes y roadmap — todo como notas Markdown dentro de tu bóveda.
 
@@ -33,7 +33,7 @@ Cada elemento se guarda como una nota Markdown con su frontmatter, organizada au
 > 🕐 Disponible una vez que el plugin sea aprobado en el catálogo oficial.
 
 1. Abre **Settings → Community plugins → Browse**.
-2. Busca **Gestión de Épicas**.
+2. Busca **Gestion de epicas**.
 3. Haz clic en **Install** y luego en **Enable**.
 
 ### Instalación manual
@@ -45,7 +45,7 @@ Cada elemento se guarda como una nota Markdown con su frontmatter, organizada au
 ```
    > 💡 La carpeta `.obsidian` está oculta. En macOS presiona `Cmd + Shift + .` en Finder para verla.
 3. Copia los tres archivos descargados en esa carpeta.
-4. En Obsidian, ve a **Settings → Community plugins**, habilita los plugins de la comunidad si es necesario y activa **Gestión de Épicas**.
+4. En Obsidian, ve a **Settings → Community plugins**, habilita los plugins de la comunidad si es necesario y activa **Gestion de epicas**.
 
 ---
 
@@ -59,9 +59,17 @@ Cada elemento se guarda como una nota Markdown con su frontmatter, organizada au
 
 ---
 
+## Documentación detallada
+
+Guías, ejemplos y artículos sobre cómo aprovechar el plugin en tu gestión de producto:
+
+**[Anatomía del Producto](https://www.anatomia-del-producto.com/obsidian/gestion-de-epicas/)**
+
+---
+
 ## Configuración
 
-En **Settings → Gestión de Épicas** puedes personalizar:
+En **Settings → Gestion de epicas** puedes personalizar:
 
 - Etiquetas de sprint
 - Estados disponibles
