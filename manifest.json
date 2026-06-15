@@ -1,0 +1,10 @@
+{
+	"id": "gestion-de-epicas",
+	"name": "Gestión de épicas",
+	"version": "1.0.0",
+	"minAppVersion": "1.7.2",
+	"description": "Concentra toda la información de una épica de producto en un solo lugar: tareas, pendientes, sprints y roadmap como notas Markdown dentro del vault.",
+	"author": "Leonardo Ruano",
+	"authorUrl": "https://www.anatomia-del-producto.com/",
+	"isDesktopOnly": true
+}

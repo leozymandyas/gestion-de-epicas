@@ -1,0 +1,1343 @@
+/* ===== Gestor Funciones ===== */
+
+/* --- Panel lateral de acciones --- */
+.gf-acciones {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px 8px;
+	/* Permite consultar el ancho del panel para hacer las pestañas responsive. */
+	container-type: inline-size;
+}
+
+/* Selector de "sprint en curso", sobre las pestañas. */
+.gf-acciones-sprint {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+.gf-acciones-sprint-titulo {
+	font-weight: 700;
+	font-size: 1.05em;
+}
+.gf-acciones-sprint-fila {
+	display: flex;
+	gap: 8px;
+	align-items: stretch;
+}
+.gf-acciones-sprint-fila .gf-acciones-anio {
+	flex: 0 0 auto;
+}
+.gf-acciones-sprint-sel {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.gf-acciones-sprint-sel .gf-multiselect,
+.gf-acciones-sprint-sel .gf-multiselect-btn {
+	width: 100%;
+}
+
+/* Barra de pestañas: cápsula gris con las pestañas dentro. Las pestañas crecen
+   por igual para abarcar todo el ancho disponible (sin quedar centradas). */
+.gf-tabs {
+	display: flex;
+	gap: 2px;
+	padding: 3px;
+	border-radius: 12px;
+	background: var(--background-modifier-hover);
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.gf-tabs::-webkit-scrollbar {
+	display: none;
+}
+
+/* Pestaña: icono (+ texto). Especificidad extra para ganar al CSS de botones.
+   `flex: 1 1 0` reparte el ancho por igual entre todas las pestañas. */
+.gf-tabs .gf-tab {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	flex: 1 1 0;
+	min-width: 0;
+	padding: 7px 12px;
+	border: none;
+	border-radius: 9px;
+	background: transparent;
+	box-shadow: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+}
+
+.gf-tabs .gf-tab:not(.gf-tab-activa):hover {
+	color: var(--text-normal);
+}
+
+/* Pestaña activa: fondo blanco y icono + texto en color de acento (morado). */
+.gf-tabs .gf-tab-activa {
+	background: var(--background-primary);
+	color: var(--text-accent);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.gf-tab-icono {
+	display: flex;
+	align-items: center;
+}
+
+/* Panel estrecho: ocultar el texto y dejar solo los iconos, repartidos a lo
+   ancho para que quepan sin scroll lateral. El umbral es bajo para que el texto
+   reaparezca en cuanto hay espacio suficiente. */
+@container (max-width: 250px) {
+	.gf-tabs .gf-tab-texto {
+		display: none;
+	}
+	.gf-tabs .gf-tab {
+		flex: 1 1 0;
+		justify-content: center;
+		padding-left: 0;
+		padding-right: 0;
+	}
+}
+
+.gf-tab-contenido {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+/* Etiqueta de subsección dentro de una pestaña (ej. Épicas / Funcionalidades). */
+.gf-seccion-label {
+	font-size: var(--font-ui-smaller);
+	font-weight: 700;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin-top: 8px;
+}
+
+.gf-seccion-label:first-child {
+	margin-top: 0;
+}
+
+/* Fila superior de la pestaña Favoritos: aviso + botón ＋. */
+.gf-favoritos-barra {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+.gf-favoritos-barra .gf-favoritos-add {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.gf-accion {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	text-align: left;
+	padding: 8px 10px;
+	border-radius: 6px;
+	cursor: pointer;
+	background-color: transparent;
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: none;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+
+.gf-accion:hover {
+	background-color: var(--background-modifier-hover);
+	border-color: var(--interactive-accent);
+}
+
+.gf-accion-icono {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+/* --- Modales --- */
+.gf-campo {
+	margin-bottom: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.gf-campo-label {
+	font-weight: 600;
+	font-size: var(--font-ui-small);
+}
+
+.gf-campo-input,
+.gf-campo-select {
+	width: 100%;
+}
+
+/* Botón del campo "Año": ocupa el ancho y alinea el texto a la izquierda. */
+.gf-anio-btn {
+	text-align: left;
+	cursor: pointer;
+}
+
+.gf-campo-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+}
+
+.gf-campo-aviso {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-style: italic;
+}
+
+.gf-botones {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+/* --- Vista unificada (dashboard) --- */
+.gf-hidden {
+	display: none;
+}
+
+.gf-dash em {
+	color: var(--text-muted);
+}
+
+.gf-dash .gf-tarea-item {
+	list-style: none;
+}
+
+.gf-dash .task-list-item-checkbox {
+	margin-right: 6px;
+}
+
+.gf-dash .internal-link {
+	cursor: pointer;
+}
+
+/* Contador de elementos junto al encabezado de sección */
+.gf-contador {
+	font-size: var(--font-ui-small);
+	font-weight: 400;
+	color: var(--text-muted);
+}
+
+/* --- Callout de link ([!link]) --- */
+.callout[data-callout="link"] {
+	--callout-color: 80, 130, 255; /* Azul */
+	--callout-icon: "🔗";
+	--callout-icon: lucide-link; /* nombre de ícono que Obsidian sí puede renderizar */
+	background-color: rgba(80, 130, 255, 0.08);
+	border-left: 4px solid rgb(80, 130, 255);
+	border-radius: 6px;
+}
+
+.callout[data-callout="link"] .callout-title {
+	color: rgb(80, 130, 255);
+	font-weight: 600;
+}
+
+/* --- Tablero Kanban (pestaña completa) --- */
+.gf-kanban {
+	padding: 12px;
+	overflow: auto;
+}
+
+.gf-kanban-aviso {
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	align-items: flex-start;
+}
+
+.gf-kanban-board {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	overflow-x: auto;
+	min-height: 100%;
+}
+
+.gf-kanban-carril {
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	min-width: 240px;
+	width: 240px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.gf-kanban-carril.gf-drop {
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: -2px;
+}
+
+.gf-kanban-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	flex-wrap: wrap;
+}
+
+/* Punto de color del carril (toma el color configurado en ajustes). */
+.gf-kanban-dot {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	flex: 0 0 auto;
+}
+
+.gf-kanban-titulo {
+	flex: 1;
+	font-size: var(--font-ui-small);
+	font-weight: 700;
+	letter-spacing: 0.03em;
+}
+
+.gf-kanban-conteo {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	background: var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 0 6px;
+	min-width: 18px;
+	text-align: center;
+}
+
+.gf-kanban-cuerpo {
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	overflow-y: auto;
+	min-height: 48px;
+}
+
+.gf-kanban-vacio {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+.gf-kanban-card {
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 8px 10px;
+	cursor: pointer;
+	box-shadow: var(--shadow-s);
+}
+
+.gf-kanban-card:hover {
+	border-color: var(--interactive-accent);
+}
+
+/* Indicador al arrastrar una tarjeta sobre otra: línea de inserción arriba. */
+.gf-kanban-card.gf-drop-card {
+	border-top: 2px solid var(--interactive-accent);
+}
+
+.gf-kanban-card-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.gf-kanban-card-nombre {
+	flex: 1;
+	font-size: var(--font-ui-small);
+	font-weight: 500;
+}
+
+/* Chips de etiquetas dentro de una tarjeta de historia. */
+.gf-kanban-card-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 6px;
+}
+
+.gf-kanban-card-func {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	font-style: italic;
+	margin-top: 2px;
+}
+
+.gf-kanban-card-fecha {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	margin-top: 2px;
+}
+
+.gf-kanban-expand {
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: 10px;
+	padding: 2px 4px;
+	border-radius: 4px;
+}
+
+.gf-kanban-expand:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* Sub-tablero de sub-tareas: mini-carriles apilados */
+.gf-kanban-subboard {
+	margin-top: 8px;
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	cursor: default;
+}
+
+.gf-kanban-minilane {
+	background-color: var(--background-secondary);
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-height: 28px;
+}
+
+.gf-kanban-minilane.gf-drop {
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: -2px;
+}
+
+.gf-kanban-minilane-titulo {
+	font-size: 10px;
+	font-weight: 700;
+	color: var(--text-faint);
+	letter-spacing: 0.05em;
+}
+
+.gf-kanban-subcard {
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 5px 8px;
+	cursor: pointer;
+}
+
+.gf-kanban-subcard:hover {
+	border-color: var(--interactive-accent);
+}
+
+/* --- Selector de épica: filtro de completadas --- */
+.gf-chk {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.gf-opcion-completada {
+	color: var(--text-faint);
+	text-decoration: line-through;
+}
+
+/* Selector de color con muestrario de paleta moderna. */
+.gf-color-selector {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+/* Multiselect (select con checkboxes) del roadmap. */
+.gf-multiselect {
+	position: relative;
+	display: inline-block;
+}
+
+.gf-multiselect-btn {
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.gf-multiselect-panel {
+	display: none;
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	z-index: 30;
+	min-width: 160px;
+	max-height: 260px;
+	overflow-y: auto;
+	padding: 6px 8px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.gf-multiselect-panel.gf-multiselect-abierto {
+	display: block;
+}
+
+/* Desplegables montados en <body>: posición fija, por encima del modal, para
+   que ningún contenedor con overflow los recorte. */
+.gf-color-panel-float,
+.gf-select-panel-float {
+	position: fixed;
+	z-index: 1000;
+}
+
+/* Desplegable de selección única (gf-select). */
+.gf-select-opcion {
+	display: block;
+	width: 100%;
+	text-align: left;
+	white-space: nowrap;
+	padding: 4px 8px;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.gf-select-opcion:hover {
+	background: var(--background-modifier-hover);
+}
+
+.gf-select-opcion-on {
+	font-weight: 600;
+	color: var(--text-accent);
+}
+
+.gf-multiselect-btn.gf-select-disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* Selector de año tipo calendario. */
+.gf-anio-nav {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+}
+
+.gf-anio-rango {
+	font-weight: 600;
+}
+
+.gf-anio-grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 6px;
+}
+
+.gf-anio-celda {
+	padding: 10px 0;
+	cursor: pointer;
+}
+
+.gf-anio-celda.gf-anio-on {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+/* Badge de número de elementos (personas) en el roadmap. */
+.gf-roadmap-num-badge {
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	padding: 0 4px;
+	border-radius: 6px;
+	background: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+/* Selector de color limitado a la paleta (punto + desplegable con nombres).
+   Se sube la especificidad (.gf-color-selector ...) para ganarle al CSS de
+   Obsidian para botones dentro de modales. */
+/* Por defecto el selector es solo el círculo de color (sin cápsula ni caret).
+   La cápsula completa aparece cuando la fila está seleccionada. */
+.gf-color-selector .gf-color-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: transparent;
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.gf-color-dot {
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	flex: 0 0 auto;
+}
+
+/* Caret oculto salvo en la fila seleccionada. */
+.gf-color-caret {
+	display: none;
+	font-size: 11px;
+	line-height: 1;
+	color: var(--text-muted);
+}
+
+/* Fila seleccionada: el selector toma forma de cápsula con fondo claro y se
+   muestra el triángulo del desplegable. */
+.gf-etq-fila.gf-etq-sel .gf-color-selector .gf-color-pill {
+	padding: 3px 10px;
+	background: var(--background-primary);
+	border-color: var(--background-modifier-border);
+}
+
+.gf-etq-fila.gf-etq-sel .gf-color-caret {
+	display: inline-block;
+}
+
+.gf-color-panel .gf-color-opcion {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 10px;
+	width: 100%;
+	text-align: left;
+	padding: 6px 8px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.gf-color-panel .gf-color-opcion:hover {
+	background: var(--background-modifier-hover);
+}
+
+.gf-color-panel .gf-color-opcion-on {
+	font-weight: 600;
+}
+
+/* Modal "Configuración de etiquetas": más alto que ancho. La especificidad
+   extra (.modal.gf-modal-etiquetas) gana al ancho por defecto de Obsidian. */
+.modal.gf-modal-etiquetas {
+	width: 460px;
+	max-width: 92vw;
+}
+
+.modal.gf-modal-etiquetas .modal-content {
+	display: flex;
+	flex-direction: column;
+	height: 70vh;
+}
+
+/* La tabla scrollea dentro de una altura fija; el modal no cambia de tamaño.
+   El borde (grueso) marca siempre el área fija, aunque haya pocos elementos. */
+.gf-etq-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	border: 2px solid var(--background-modifier-border);
+	border-radius: 8px;
+}
+
+.gf-etq-tabs {
+	display: flex;
+	gap: 12px;
+	align-items: flex-end;
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding-bottom: 10px;
+	margin-bottom: 14px;
+}
+
+/* Pestañas de solo texto; la especificidad extra (.gf-etq-tabs …) gana al CSS
+   de botones de Obsidian dentro del modal. */
+.gf-etq-tabs .gf-etq-tab {
+	padding: 8px 18px;
+	background: var(--background-primary);
+	box-shadow: none;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	cursor: pointer;
+}
+
+/* Pestaña activa: texto de acento (morado). */
+.gf-etq-tabs .gf-etq-tab-on {
+	color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+.gf-etq-barra {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.gf-etq-btn {
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+/* La tabla llena el área con scroll; el borde lo pone el contenedor. */
+.gf-etq-tabla {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.gf-etq-fila {
+	cursor: pointer;
+}
+
+.gf-etq-fila:nth-child(odd) {
+	background: var(--background-primary);
+}
+
+.gf-etq-fila:nth-child(even) {
+	background: var(--background-secondary);
+}
+
+.gf-etq-fila:not(:first-child) td {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Fila seleccionada: fondo de acento (morado) y texto sobre acento. */
+.gf-etq-fila.gf-etq-sel {
+	background: var(--interactive-accent);
+}
+
+.gf-etq-fila.gf-etq-sel .gf-etq-nombre {
+	color: var(--text-on-accent);
+}
+
+.gf-etq-fila td {
+	padding: 7px 12px;
+	vertical-align: middle;
+	border-left: none;
+	border-right: none;
+	border-bottom: none;
+	text-align: left;
+}
+
+.gf-etq-color {
+	width: 1%;
+	white-space: nowrap;
+}
+
+.gf-etq-del-td {
+	width: 1%;
+	white-space: nowrap;
+	text-align: right;
+}
+
+/* Columna del checkbox de visibilidad del carril (al final de la fila). */
+.gf-etq-visible-td {
+	width: 1%;
+	white-space: nowrap;
+	text-align: right;
+}
+
+.gf-etq-visible-td input {
+	cursor: pointer;
+}
+
+.gf-etq-nombre {
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+}
+
+.gf-etq-input {
+	width: 100%;
+	font-size: var(--font-ui-small);
+}
+
+/* Tarjeta "Configuración del Sprint": bloque destacado con la descripción,
+   el número de sprints y el acceso a las etiquetas de sprint. */
+.gf-sprint-card {
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 14px;
+	padding: 20px 24px;
+	margin-bottom: 18px;
+}
+
+.gf-sprint-card-desc {
+	margin: 0 0 18px;
+	color: var(--text-normal);
+	line-height: 1.5;
+}
+
+.gf-sprint-card-fila {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	flex-wrap: wrap;
+}
+
+.gf-sprint-card-label {
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.gf-sprint-card-input {
+	width: 72px;
+	text-align: center;
+}
+
+.gf-sprint-card-btn {
+	cursor: pointer;
+}
+
+/* Tarjeta con descripción a la izquierda y botones a la derecha. */
+.gf-card-fila {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+.gf-card-desc {
+	flex: 1 1 240px;
+	color: var(--text-normal);
+	line-height: 1.5;
+}
+
+/* Lista de elementos con checkbox (selector de favoritos). */
+.gf-panel-items {
+	margin: 4px 0 0 22px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+/* --- Chips de etiquetas --- */
+.gf-chip {
+	font-size: var(--font-ui-smaller);
+	padding: 2px 8px;
+	border-radius: 999px;
+	border: 1px solid var(--background-modifier-border);
+	background-color: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.gf-chip:hover {
+	border-color: var(--interactive-accent);
+}
+
+.gf-chip-on {
+	background-color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.gf-chip-mini {
+	font-size: 9px;
+	padding: 0 5px;
+	cursor: inherit;
+	pointer-events: none;
+}
+
+/* --- Modal Asignar sprints --- */
+.gf-modal-sprints {
+	width: 560px;
+	max-width: 90vw;
+}
+
+.gf-sprints-lista {
+	max-height: 320px;
+	overflow-y: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 4px;
+	margin-bottom: 8px;
+}
+
+.gf-sprint-fila {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.gf-sprint-fila:last-child {
+	border-bottom: none;
+}
+
+.gf-sprint-cabecera {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 0 0 auto;
+}
+
+.gf-sprint-nombre {
+	font-size: var(--font-ui-small);
+}
+
+/* Engrane que abre la configuración de etiquetas del sprint. */
+.gf-sprint-engrane {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.gf-sprint-engrane:hover {
+	color: var(--text-normal);
+}
+
+.gf-sprint-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0;
+}
+
+/* Chip estándar de etiqueta: relleno con su color y texto de contraste. */
+.gf-etq-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: 6px;
+	white-space: nowrap;
+}
+
+.gf-etq-chip-mas {
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+/* Selector de etiquetas (chips + botón que abre el desplegable). */
+.gf-selet {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.gf-selet-chips {
+	display: inline-flex;
+	gap: 4px;
+	flex-wrap: wrap;
+}
+
+.gf-selet-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+	cursor: pointer;
+}
+
+.gf-selet-panel .gf-selet-opcion {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 6px;
+	cursor: pointer;
+}
+
+.gf-selet-panel .gf-selet-opcion:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* Modal "Asignar etiquetas": fila por historia. */
+.gf-asignet-fila {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.gf-asignet-fila:last-child {
+	border-bottom: none;
+}
+
+.gf-asignet-nombre {
+	flex: 0 0 150px;
+	max-width: 150px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--font-ui-small);
+}
+
+/* Submodal "Configurar sprint". */
+.gf-config-sprint-cab {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 14px;
+}
+
+.gf-config-sprint-nombre {
+	font-weight: 600;
+	padding: 4px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+}
+
+.gf-config-sprint-caja {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	padding: 14px 16px;
+}
+
+.gf-config-etq-fila {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.gf-config-num {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+}
+
+.gf-config-num input {
+	width: 64px;
+}
+
+/* --- Etiquetas en configuración --- */
+.gf-etiquetas {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 10px;
+}
+
+.gf-etiqueta {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	max-width: 360px;
+}
+
+.gf-etiqueta-nombre {
+	flex: 1;
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+}
+
+.gf-etiqueta-del {
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: 14px;
+	line-height: 1;
+}
+
+.gf-etiqueta-del:hover {
+	color: var(--text-error);
+}
+
+.gf-etiqueta-add {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	max-width: 360px;
+}
+
+.gf-etiqueta-add input[type="text"] {
+	flex: 1;
+}
+
+.gf-etiqueta-color {
+	width: 28px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+}
+
+.gf-estado-nombre {
+	cursor: default;
+}
+
+/* --- Vista Roadmap --- */
+.gf-roadmap {
+	padding: 12px;
+	overflow: auto;
+}
+
+.gf-roadmap-controles {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+}
+
+.gf-roadmap-rango {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.gf-roadmap-lbl {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+/* Botón "Recargar" de los tableros (kanban y gestor de funcionalidades). */
+.gf-recargar-btn {
+	cursor: pointer;
+}
+
+.gf-roadmap-num {
+	width: 60px;
+}
+
+.gf-roadmap-estados {
+	display: flex;
+	gap: 4px;
+	flex-wrap: wrap;
+}
+
+.gf-roadmap-recargar {
+	margin-left: auto;
+}
+
+.gf-roadmap-tabla-wrap {
+	overflow-x: auto;
+}
+
+.gf-roadmap-tabla {
+	border-collapse: collapse;
+	font-size: var(--font-ui-small);
+}
+
+.gf-roadmap-tabla th,
+.gf-roadmap-tabla td {
+	border: 1px solid var(--background-modifier-border);
+	padding: 4px 6px;
+	text-align: center;
+	min-width: 34px;
+}
+
+.gf-roadmap-th-epica,
+.gf-roadmap-epica {
+	text-align: left;
+	min-width: 160px;
+	white-space: nowrap;
+}
+
+.gf-roadmap-epica .internal-link {
+	cursor: pointer;
+}
+
+.gf-roadmap-fn {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.gf-roadmap-celda {
+	height: 34px;
+}
+
+.gf-roadmap-on {
+	background-color: rgba(80, 130, 255, 0.25);
+	cursor: pointer;
+}
+
+.gf-roadmap-on:hover {
+	background-color: rgba(80, 130, 255, 0.45);
+}
+
+.gf-roadmap-bloque {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-items: flex-start;
+}
+
+/* --- v6: secciones del kanban, progreso, badges --- */
+.gf-kanban-seccion {
+	font-size: var(--font-ui-small);
+	font-weight: 700;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin: 14px 0 8px 0;
+}
+
+.gf-kanban-progreso {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 4px;
+}
+
+.gf-kanban-progreso-texto {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	min-width: 32px;
+}
+
+.gf-kanban-progreso-barra {
+	flex: 1;
+	height: 5px;
+	background-color: var(--background-modifier-border);
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.gf-kanban-progreso-relleno {
+	height: 100%;
+	background-color: var(--interactive-accent);
+	border-radius: 999px;
+}
+
+.gf-tipo-badge {
+	font-size: 9px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 1px 5px;
+	white-space: nowrap;
+}
+
+.gf-estado-badge {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	padding: 1px 8px;
+	margin-left: 8px;
+	white-space: nowrap;
+}
+
+.gf-incidencia-sub {
+	margin-left: 24px;
+}
+
+/* --- Mover épica --- */
+.gf-mover-fila {
+	display: flex;
+	padding: 2px 0;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+/* --- Tareas por colaborador --- */
+.gf-colab {
+	padding: 12px;
+	overflow: auto;
+}
+
+.gf-colab-buscador {
+	min-width: 280px;
+}
+
+.gf-colab-card {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 10px 12px;
+	margin-bottom: 10px;
+	max-width: 720px;
+}
+
+.gf-colab-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.gf-colab-punto {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background-color: var(--interactive-accent);
+	flex-shrink: 0;
+}
+
+.gf-colab-nombre {
+	font-weight: 600;
+}
+
+.gf-colab-conteo {
+	margin-left: auto;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.gf-colab-lista {
+	margin: 8px 0 0 0;
+	padding-left: 4px;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: var(--font-ui-small);
+}
+
+.gf-colab-lista .internal-link {
+	cursor: pointer;
+	margin: 0 4px;
+}
+
+.gf-colab-chips {
+	margin: 0 0 6px 0;
+}
