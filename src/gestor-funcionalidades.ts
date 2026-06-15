@@ -46,6 +46,8 @@ export class GestorFuncionalidadesView extends ItemView {
 	private anio = new Date().getFullYear();
 	/** Filtro por etiqueta (nombres seleccionados). */
 	private filtro = new Set<string>();
+	/** Filtro por colaborador (nombres seleccionados). */
+	private filtroColab = new Set<string>();
 	/** Filtro de intervalo de sprints (igual que en el roadmap): acota columnas. */
 	private desde: number;
 	private hasta: number;
@@ -210,7 +212,7 @@ export class GestorFuncionalidadesView extends ItemView {
 			},
 		});
 
-		// Filtro por etiqueta (solo con épica elegida).
+		// Filtros (solo con épica elegida): por etiqueta y por colaborador.
 		if (this.epicaActual()) {
 			barra.createEl("span", { text: "Etiquetas", cls: "gf-roadmap-lbl" });
 			crearSelectorEtiquetas({
@@ -220,10 +222,20 @@ export class GestorFuncionalidadesView extends ItemView {
 				textoBtn: "Filtrar por etiqueta",
 				onChange: () => pintarBoard(),
 			});
-			// Borra solo el filtro por etiqueta.
+			barra.createEl("span", { text: "Colaborador", cls: "gf-roadmap-lbl" });
+			crearSelectorEtiquetas({
+				parent: barra,
+				etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+				seleccion: this.filtroColab,
+				textoBtn: "Filtrar por colaborador",
+				textoVacio: "No hay colaboradores registrados.",
+				onChange: () => pintarBoard(),
+			});
+			// Borra los filtros por etiqueta y por colaborador.
 			const borrar = barra.createEl("button", { text: "Borrar filtros", cls: "gf-recargar-btn" });
 			borrar.addEventListener("click", () => {
 				this.filtro.clear();
+				this.filtroColab.clear();
 				this.render();
 			});
 		}
@@ -249,7 +261,9 @@ export class GestorFuncionalidadesView extends ItemView {
 				.map((n) => ({ titulo: `Sprint ${n}`, sprint: n })),
 		];
 		const filtradas = this.historias.filter(
-			(h) => this.filtro.size === 0 || h.etiquetas.some((e) => this.filtro.has(e))
+			(h) =>
+				(this.filtro.size === 0 || h.etiquetas.some((e) => this.filtro.has(e))) &&
+				(this.filtroColab.size === 0 || h.colaboradores.some((c) => this.filtroColab.has(c)))
 		);
 
 		for (const col of columnas) {

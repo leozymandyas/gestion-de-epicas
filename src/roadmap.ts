@@ -9,7 +9,7 @@ import {
 	listFuncionalidadesDe,
 } from "./files";
 import { renderChipEtiqueta } from "./colores";
-import { AsignarSprintModal } from "./modals";
+import { AsignarSprintModal, crearSelectorEtiquetas } from "./modals";
 import { AnioPickerModal, crearSelect } from "./ui";
 
 export const VIEW_TYPE_ROADMAP = "gestor-funciones-roadmap";
@@ -33,6 +33,8 @@ export class RoadmapView extends ItemView {
 	private anio = new Date().getFullYear();
 	private desde: number;
 	private hasta: number;
+	/** Filtro por colaborador (nombres seleccionados); vacío = todos. */
+	private filtroColab = new Set<string>();
 
 	constructor(leaf: WorkspaceLeaf, plugin: GestorFuncionesPlugin) {
 		super(leaf);
@@ -141,6 +143,22 @@ export class RoadmapView extends ItemView {
 			},
 		});
 
+		// Filtro por colaborador (asignados a la épica/historia).
+		barra.createEl("span", { text: "Colaborador", cls: "gf-roadmap-lbl" });
+		crearSelectorEtiquetas({
+			parent: barra,
+			etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+			seleccion: this.filtroColab,
+			textoBtn: "Filtrar por colaborador",
+			textoVacio: "No hay colaboradores registrados.",
+			onChange: () => pintarTabla(),
+		});
+		const borrar = barra.createEl("button", { text: "Borrar filtros", cls: "gf-roadmap-recargar" });
+		borrar.addEventListener("click", () => {
+			this.filtroColab.clear();
+			void this.render();
+		});
+
 		const recargar = barra.createEl("button", { text: "Recargar", cls: "gf-roadmap-recargar" });
 		recargar.addEventListener("click", () => void this.render());
 
@@ -148,7 +166,11 @@ export class RoadmapView extends ItemView {
 
 		const pintarTabla = () => {
 			tablaCont.empty();
-			const visibles = filas;
+			const visibles = filas.filter(
+				(f) =>
+					this.filtroColab.size === 0 ||
+					getAsignados(this.app, f.ref.file).some((c) => this.filtroColab.has(c))
+			);
 			if (visibles.length === 0) {
 				tablaCont.createEl("p", {
 					cls: "gf-kanban-vacio",

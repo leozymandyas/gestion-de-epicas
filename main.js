@@ -2477,6 +2477,16 @@ var CrearFuncionalidadModal = class extends GestorModal {
     this.titleEl.setText("Crear \xE9pica");
     const nombre = this.campoTexto("Nombre de la \xE9pica", "Escribe nombre de la \xE9pica");
     const sprintOpc = this.campoSprintOpcional();
+    const colabSel = /* @__PURE__ */ new Set();
+    const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
+    colWrap.createEl("label", { text: "Asignar colaboradores", cls: "gf-campo-label" });
+    crearSelectorEtiquetas({
+      parent: colWrap.createDiv(),
+      etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+      seleccion: colabSel,
+      textoBtn: "Asignar colaboradores\u2026",
+      textoVacio: "No hay colaboradores registrados."
+    });
     const chkRow = this.contentEl.createDiv({ cls: "gf-campo" });
     const chkLabel = chkRow.createEl("label", { cls: "gf-chk" });
     const chk = chkLabel.createEl("input", { type: "checkbox" });
@@ -2507,6 +2517,7 @@ var CrearFuncionalidadModal = class extends GestorModal {
           if (ref)
             await guardarSprints(this.app, ref, sps);
         }
+        await this.aplicarAsignados(file, [...colabSel]);
         if (this.crearNuevo) {
           new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: \xE9pica "${valor}" creada.`);
           nombre.input.value = "";
@@ -3779,6 +3790,16 @@ var CrearFuncionalidadNuevaModal = class extends GestorModal {
     };
     epica.select.addEventListener("change", refrescarEtiquetas);
     refrescarEtiquetas();
+    const colabSel = /* @__PURE__ */ new Set();
+    const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
+    colWrap.createEl("label", { text: "Asignar colaboradores", cls: "gf-campo-label" });
+    crearSelectorEtiquetas({
+      parent: colWrap.createDiv(),
+      etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+      seleccion: colabSel,
+      textoBtn: "Asignar colaboradores\u2026",
+      textoVacio: "No hay colaboradores registrados."
+    });
     const chkRow = this.contentEl.createDiv({ cls: "gf-campo" });
     const chkLabel = chkRow.createEl("label", { cls: "gf-chk" });
     const chk = chkLabel.createEl("input", { type: "checkbox" });
@@ -3808,6 +3829,7 @@ var CrearFuncionalidadNuevaModal = class extends GestorModal {
         if (seleccion.size > 0) {
           await guardarEtiquetasHistoria(this.app, file, [...seleccion]);
         }
+        await this.aplicarAsignados(file, [...colabSel]);
         if (this.crearNuevo) {
           new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: historia "${valor}" creada.`);
           nombre.input.value = "";
@@ -4195,6 +4217,8 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
     this.anio = (/* @__PURE__ */ new Date()).getFullYear();
     /** Filtro por etiqueta (nombres seleccionados). */
     this.filtro = /* @__PURE__ */ new Set();
+    /** Filtro por colaborador (nombres seleccionados). */
+    this.filtroColab = /* @__PURE__ */ new Set();
     this.epicas = [];
     this.historias = [];
     /** Números de sprint que la épica tiene asignados en el año visible. */
@@ -4348,9 +4372,19 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
         textoBtn: "Filtrar por etiqueta",
         onChange: () => pintarBoard()
       });
+      barra.createEl("span", { text: "Colaborador", cls: "gf-roadmap-lbl" });
+      crearSelectorEtiquetas({
+        parent: barra,
+        etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+        seleccion: this.filtroColab,
+        textoBtn: "Filtrar por colaborador",
+        textoVacio: "No hay colaboradores registrados.",
+        onChange: () => pintarBoard()
+      });
       const borrar = barra.createEl("button", { text: "Borrar filtros", cls: "gf-recargar-btn" });
       borrar.addEventListener("click", () => {
         this.filtro.clear();
+        this.filtroColab.clear();
         this.render();
       });
     }
@@ -4370,7 +4404,7 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
       ...this.sprintsEpica.filter((n) => n >= this.desde && n <= this.hasta).map((n) => ({ titulo: `Sprint ${n}`, sprint: n }))
     ];
     const filtradas = this.historias.filter(
-      (h) => this.filtro.size === 0 || h.etiquetas.some((e) => this.filtro.has(e))
+      (h) => (this.filtro.size === 0 || h.etiquetas.some((e) => this.filtro.has(e))) && (this.filtroColab.size === 0 || h.colaboradores.some((c) => this.filtroColab.has(c)))
     );
     for (const col of columnas) {
       const colEl = board.createDiv({ cls: "gf-kanban-carril" });
@@ -4506,6 +4540,8 @@ var RoadmapView = class extends import_obsidian11.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.anio = (/* @__PURE__ */ new Date()).getFullYear();
+    /** Filtro por colaborador (nombres seleccionados); vacío = todos. */
+    this.filtroColab = /* @__PURE__ */ new Set();
     this.plugin = plugin;
     this.desde = Math.min(Math.max(plugin.settings.sprintActual.sprint, 1), plugin.settings.numSprints);
     this.hasta = plugin.settings.numSprints;
@@ -4594,12 +4630,28 @@ var RoadmapView = class extends import_obsidian11.ItemView {
         pintarTabla();
       }
     });
+    barra.createEl("span", { text: "Colaborador", cls: "gf-roadmap-lbl" });
+    crearSelectorEtiquetas({
+      parent: barra,
+      etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+      seleccion: this.filtroColab,
+      textoBtn: "Filtrar por colaborador",
+      textoVacio: "No hay colaboradores registrados.",
+      onChange: () => pintarTabla()
+    });
+    const borrar = barra.createEl("button", { text: "Borrar filtros", cls: "gf-roadmap-recargar" });
+    borrar.addEventListener("click", () => {
+      this.filtroColab.clear();
+      void this.render();
+    });
     const recargar = barra.createEl("button", { text: "Recargar", cls: "gf-roadmap-recargar" });
     recargar.addEventListener("click", () => void this.render());
     const tablaCont = cont.createDiv();
     const pintarTabla = () => {
       tablaCont.empty();
-      const visibles = filas;
+      const visibles = filas.filter(
+        (f) => this.filtroColab.size === 0 || getAsignados(this.app, f.ref.file).some((c) => this.filtroColab.has(c))
+      );
       if (visibles.length === 0) {
         tablaCont.createEl("p", {
           cls: "gf-kanban-vacio",

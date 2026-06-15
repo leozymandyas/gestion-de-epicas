@@ -318,6 +318,18 @@ export class CrearFuncionalidadModal extends GestorModal {
 		const nombre = this.campoTexto("Nombre de la épica", "Escribe nombre de la épica");
 		const sprintOpc = this.campoSprintOpcional();
 
+		// Colaboradores asignados a la épica (su nota principal).
+		const colabSel = new Set<string>();
+		const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
+		colWrap.createEl("label", { text: "Asignar colaboradores", cls: "gf-campo-label" });
+		crearSelectorEtiquetas({
+			parent: colWrap.createDiv(),
+			etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+			seleccion: colabSel,
+			textoBtn: "Asignar colaboradores…",
+			textoVacio: "No hay colaboradores registrados.",
+		});
+
 		const chkRow = this.contentEl.createDiv({ cls: "gf-campo" });
 		const chkLabel = chkRow.createEl("label", { cls: "gf-chk" });
 		const chk = chkLabel.createEl("input", { type: "checkbox" });
@@ -348,6 +360,7 @@ export class CrearFuncionalidadModal extends GestorModal {
 					);
 					if (ref) await files.guardarSprints(this.app, ref, sps);
 				}
+				await this.aplicarAsignados(file, [...colabSel]);
 				if (this.crearNuevo) {
 					// Se conserva el resto del formulario (sprints, etc.); solo se
 					// limpia el nombre para crear la siguiente.
@@ -1752,6 +1765,18 @@ export class CrearFuncionalidadNuevaModal extends GestorModal {
 		epica.select.addEventListener("change", refrescarEtiquetas);
 		refrescarEtiquetas();
 
+		// Colaboradores asignados a la historia (su nota principal).
+		const colabSel = new Set<string>();
+		const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
+		colWrap.createEl("label", { text: "Asignar colaboradores", cls: "gf-campo-label" });
+		crearSelectorEtiquetas({
+			parent: colWrap.createDiv(),
+			etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+			seleccion: colabSel,
+			textoBtn: "Asignar colaboradores…",
+			textoVacio: "No hay colaboradores registrados.",
+		});
+
 		const chkRow = this.contentEl.createDiv({ cls: "gf-campo" });
 		const chkLabel = chkRow.createEl("label", { cls: "gf-chk" });
 		const chk = chkLabel.createEl("input", { type: "checkbox" });
@@ -1781,6 +1806,7 @@ export class CrearFuncionalidadNuevaModal extends GestorModal {
 				if (seleccion.size > 0) {
 					await files.guardarEtiquetasHistoria(this.app, file, [...seleccion]);
 				}
+				await this.aplicarAsignados(file, [...colabSel]);
 				if (this.crearNuevo) {
 					// Se conserva la épica y las etiquetas elegidas; solo se limpia
 					// el nombre para crear la siguiente historia.
