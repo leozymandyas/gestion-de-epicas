@@ -891,6 +891,52 @@ var CATEGORIAS = [
     }
   }
 ];
+var CONFIG_BOVEDA_PATH = ".gestion-de-epicas-config.json";
+async function guardarConfigBoveda(plugin) {
+  const datos = { [MARCA]: 1 };
+  for (const cat of CATEGORIAS)
+    datos[cat.clave] = cat.exportar(plugin.settings);
+  const json = JSON.stringify(datos, null, 2);
+  if (json === plugin.configBovedaUltima)
+    return;
+  plugin.configBovedaUltima = json;
+  try {
+    await plugin.app.vault.adapter.write(CONFIG_BOVEDA_PATH, json);
+  } catch (e) {
+    console.error(e);
+  }
+}
+async function aplicarConfigBoveda(plugin) {
+  const adapter = plugin.app.vault.adapter;
+  let texto;
+  try {
+    if (!await adapter.exists(CONFIG_BOVEDA_PATH))
+      return false;
+    texto = await adapter.read(CONFIG_BOVEDA_PATH);
+  } catch (e) {
+    return false;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(texto);
+  } catch (e) {
+    return false;
+  }
+  if (!parsed || typeof parsed !== "object" || !(MARCA in parsed))
+    return false;
+  let aplicado = false;
+  for (const cat of CATEGORIAS) {
+    if (!(cat.clave in parsed))
+      continue;
+    const valor = cat.leerArchivo(parsed[cat.clave]);
+    if (valor !== null) {
+      cat.aplicar(plugin.settings, valor);
+      aplicado = true;
+    }
+  }
+  plugin.configBovedaUltima = texto;
+  return aplicado;
+}
 function descargarJson(nombre, contenido) {
   const blob = new Blob([contenido], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -5005,6 +5051,8 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
+    /** Última config escrita a la bóveda (para no reescribir si no cambió). */
+    this.configBovedaUltima = "";
   }
   async onload() {
     await this.loadSettings();
@@ -5363,8 +5411,12 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
         }
       }
     };
+    const aplicada = await aplicarConfigBoveda(this);
+    if (!aplicada)
+      await guardarConfigBoveda(this);
   }
   async saveSettings() {
     await this.saveData(this.settings);
+    await guardarConfigBoveda(this);
   }
 };

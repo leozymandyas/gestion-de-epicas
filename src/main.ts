@@ -25,6 +25,7 @@ import {
 	renombrarEtiquetaSprint,
 	renombrarTipoIncidencia,
 } from "./files";
+import { aplicarConfigBoveda, guardarConfigBoveda } from "./config-io";
 import { registerDashboard } from "./dashboard";
 import { AccionesView, VIEW_TYPE_ACCIONES } from "./acciones";
 import { KanbanView, VIEW_TYPE_KANBAN } from "./kanban";
@@ -69,6 +70,8 @@ export type TipoModal =
 
 export default class GestorFuncionesPlugin extends Plugin {
 	settings: GestorSettings = DEFAULT_SETTINGS;
+	/** Última config escrita a la bóveda (para no reescribir si no cambió). */
+	configBovedaUltima = "";
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -472,9 +475,16 @@ export default class GestorFuncionesPlugin extends Plugin {
 				},
 			},
 		};
+
+		// Configuración compartida guardada en la bóveda: si existe, manda (para
+		// usar la misma bóveda en otro equipo sin reconfigurar). Si no, se siembra.
+		const aplicada = await aplicarConfigBoveda(this);
+		if (!aplicada) await guardarConfigBoveda(this);
 	}
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+		// Refleja los cambios en el archivo de configuración de la bóveda.
+		await guardarConfigBoveda(this);
 	}
 }

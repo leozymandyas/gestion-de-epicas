@@ -117,6 +117,61 @@ export const CATEGORIAS: Categoria[] = [
 	},
 ];
 
+/**
+ * Archivo de configuración guardado dentro de la bóveda (oculto). Permite que la
+ * configuración del cliente (las mismas categorías que se exportan) viaje con la
+ * bóveda entre equipos sin tener que reconfigurar. Vive en el contenido del vault
+ * (no en `.obsidian/`), por lo que se sincroniza siempre con la bóveda.
+ */
+export const CONFIG_BOVEDA_PATH = ".gestion-de-epicas-config.json";
+
+/** Escribe la configuración exportable a la bóveda. Evita reescrituras si no
+ * cambió (deduplica con `plugin.configBovedaUltima`). */
+export async function guardarConfigBoveda(plugin: GestorFuncionesPlugin): Promise<void> {
+	const datos: Record<string, unknown> = { [MARCA]: 1 };
+	for (const cat of CATEGORIAS) datos[cat.clave] = cat.exportar(plugin.settings);
+	const json = JSON.stringify(datos, null, 2);
+	if (json === plugin.configBovedaUltima) return;
+	plugin.configBovedaUltima = json;
+	try {
+		await plugin.app.vault.adapter.write(CONFIG_BOVEDA_PATH, json);
+	} catch (e) {
+		console.error(e);
+	}
+}
+
+/** Aplica la configuración guardada en la bóveda (si existe) sobre los ajustes
+ * actuales. Devuelve true si se aplicó algo. */
+export async function aplicarConfigBoveda(plugin: GestorFuncionesPlugin): Promise<boolean> {
+	const adapter = plugin.app.vault.adapter;
+	let texto: string;
+	try {
+		if (!(await adapter.exists(CONFIG_BOVEDA_PATH))) return false;
+		texto = await adapter.read(CONFIG_BOVEDA_PATH);
+	} catch {
+		return false;
+	}
+	let parsed: Record<string, unknown>;
+	try {
+		parsed = JSON.parse(texto) as Record<string, unknown>;
+	} catch {
+		return false;
+	}
+	if (!parsed || typeof parsed !== "object" || !(MARCA in parsed)) return false;
+	let aplicado = false;
+	for (const cat of CATEGORIAS) {
+		if (!(cat.clave in parsed)) continue;
+		const valor = cat.leerArchivo(parsed[cat.clave]);
+		if (valor !== null) {
+			cat.aplicar(plugin.settings, valor);
+			aplicado = true;
+		}
+	}
+	// Recuerda el contenido leído para deduplicar el próximo guardado.
+	plugin.configBovedaUltima = texto;
+	return aplicado;
+}
+
 function descargarJson(nombre: string, contenido: string): void {
 	const blob = new Blob([contenido], { type: "application/json" });
 	const url = URL.createObjectURL(blob);
