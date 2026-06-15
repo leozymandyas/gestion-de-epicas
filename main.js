@@ -592,7 +592,13 @@ function slugCarpetaLibre(app, dir, slug) {
   return `${slug}-${n}`;
 }
 function slugArchivoLibre(app, dir, slug) {
-  const existe = (s) => !!app.vault.getAbstractFileByPath((0, import_obsidian.normalizePath)(`${dir}/${s}.md`));
+  return slugArchivoLibreExcepto(app, dir, slug, "");
+}
+function slugArchivoLibreExcepto(app, dir, slug, exceptoPath) {
+  const existe = (s) => {
+    const p = (0, import_obsidian.normalizePath)(`${dir}/${s}.md`);
+    return p !== exceptoPath && !!app.vault.getAbstractFileByPath(p);
+  };
   if (!existe(slug))
     return slug;
   let n = 2;
@@ -753,22 +759,31 @@ async function quitarLineaConEnlace(app, file, base) {
     return lines.filter((l) => !l.includes(`[[${base}]]`) && !l.includes(`[[${base}|`)).join("\n");
   });
 }
-async function moverIncidencia(app, incFile, origen, destino, nuevoTipoNombre) {
-  var _a;
-  const fm = (_a = app.metadataCache.getFileCache(incFile)) == null ? void 0 : _a.frontmatter;
-  const nombre = (fm == null ? void 0 : fm.nombre) ? String(fm.nombre) : incFile.basename;
+async function moverIncidencia(app, incFile, origen, destino, nuevoTipoNombre, nuevoNombre) {
   const oldBase = incFile.basename;
+  const nombreFinal = nuevoNombre.trim() || oldBase;
   await quitarLineaConEnlace(app, origen.file, oldBase);
   const nuevoSlug = slugify(nuevoTipoNombre);
   const destDir = `${destino.folder.path}/${nuevoSlug}`;
   await ensureFolder(app, destDir);
-  const base = slugArchivoLibre(app, destDir, oldBase);
-  await app.fileManager.renameFile(incFile, (0, import_obsidian.normalizePath)(`${destDir}/${base}.md`));
-  await app.fileManager.processFrontMatter(incFile, (fm2) => {
-    fm2.tipo = nuevoSlug;
-    fm2.funcionalidad = `[[${destino.slug}]]`;
+  const deseado = slugify(nombreFinal) || oldBase;
+  const base = slugArchivoLibreExcepto(app, destDir, deseado, incFile.path);
+  const destPath = (0, import_obsidian.normalizePath)(`${destDir}/${base}.md`);
+  if (destPath !== incFile.path) {
+    await app.fileManager.renameFile(incFile, destPath);
+  }
+  await app.fileManager.processFrontMatter(incFile, (fm) => {
+    fm.tipo = nuevoSlug;
+    fm.funcionalidad = `[[${destino.slug}]]`;
+    fm.nombre = nombreFinal;
   });
-  await appendToSection(app, destino.file, `## ${nuevoTipoNombre}`, `- [ ] [[${base}|${nombre}]]`);
+  await actualizarH1(app, incFile, nombreFinal);
+  await appendToSection(
+    app,
+    destino.file,
+    `## ${nuevoTipoNombre}`,
+    `- [ ] [[${base}|${nombreFinal}]]`
+  );
 }
 
 // src/config-io.ts
@@ -2215,6 +2230,10 @@ var GestorModal = class extends import_obsidian8.Modal {
     super(plugin.app);
     this.plugin = plugin;
   }
+  /** Encabezado de sección dentro del modal, para agrupar campos. */
+  seccion(texto) {
+    this.contentEl.createEl("div", { cls: "gf-modal-seccion", text: texto });
+  }
   campoTexto(label, placeholder) {
     const wrap = this.contentEl.createDiv({ cls: "gf-campo" });
     wrap.createEl("label", { text: label, cls: "gf-campo-label" });
@@ -2627,6 +2646,7 @@ var MoverIncidenciaModal = class extends GestorModal {
     this.titleEl.setText("Editar incidencia");
     this.modalEl.addClass("gf-modal-sprints");
     const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+    this.seccion("Incidencia a editar");
     const epica = this.campoEpica(funcs);
     const fn = this.campoFuncionalidad(epica);
     const incCampo = this.campoSelect("Incidencia", "Seleccionar incidencia");
@@ -2644,13 +2664,14 @@ var MoverIncidenciaModal = class extends GestorModal {
     };
     epica.select.addEventListener("change", repoblarInc);
     fn.select.addEventListener("change", repoblarInc);
-    repoblarInc();
     const incSel = () => {
       var _a;
       const v = incCampo.select.value;
       return v === "" ? null : (_a = incidencias[Number(v)]) != null ? _a : null;
     };
-    const tipo = this.campoSelect("Nuevo tipo", "Seleccionar tipo");
+    this.seccion("Cambios");
+    const nombre = this.campoTexto("Nombre", "Nombre de la incidencia");
+    const tipo = this.campoSelect("Tipo", "Seleccionar tipo");
     this.setOpciones(
       tipo.select,
       "Seleccionar tipo",
@@ -2658,16 +2679,19 @@ var MoverIncidenciaModal = class extends GestorModal {
     );
     incCampo.select.addEventListener("change", () => {
       const i = incSel();
-      if (i)
+      if (i) {
+        nombre.input.value = i.nombre;
         tipo.select.value = i.tipoNombre;
+      }
     });
-    const destEpica = this.campoSelect("Mover a la \xE9pica", "Seleccionar \xE9pica");
+    this.seccion("Ubicaci\xF3n");
+    const destEpica = this.campoSelect("\xC9pica", "Seleccionar \xE9pica");
     this.setOpciones(
       destEpica.select,
       "Seleccionar \xE9pica",
       funcs.map((f) => ({ value: f.slug, label: f.nombre }))
     );
-    const destFn = this.campoSelect("Historia destino (opcional)", "Nivel \xE9pica");
+    const destFn = this.campoSelect("Historia (opcional)", "Nivel \xE9pica");
     let destHist = [];
     const repoblarDest = () => {
       const e = funcs.find((f) => f.slug === destEpica.select.value);
@@ -2679,10 +2703,24 @@ var MoverIncidenciaModal = class extends GestorModal {
       );
     };
     destEpica.select.addEventListener("change", repoblarDest);
+    const sincronizarDestino = () => {
+      const ep = epica.getFunc();
+      if (ep) {
+        destEpica.select.value = ep.slug;
+        repoblarDest();
+        const h = fn.getFn();
+        if (h)
+          destFn.select.value = h.slug;
+      }
+    };
+    epica.select.addEventListener("change", sincronizarDestino);
+    fn.select.addEventListener("change", sincronizarDestino);
+    repoblarInc();
     repoblarDest();
     this.botones(async () => {
       var _a, _b, _c, _d;
       this.limpiarError(incCampo);
+      this.limpiarError(nombre);
       this.limpiarError(tipo);
       this.limpiarError(destEpica);
       const i = incSel();
@@ -2691,8 +2729,13 @@ var MoverIncidenciaModal = class extends GestorModal {
       const destH = (_d = destHist.find((h) => h.slug === destFn.select.value)) != null ? _d : null;
       const destFunc = destH != null ? destH : destE;
       const nuevoTipo = tipo.select.value;
+      const nuevoNombre = nombre.input.value.trim();
       if (!i || !origen) {
         this.mostrarError(incCampo, "Selecciona la incidencia.");
+        return;
+      }
+      if (!nuevoNombre) {
+        this.mostrarError(nombre, "El nombre es obligatorio.");
         return;
       }
       if (!destFunc) {
@@ -2704,7 +2747,7 @@ var MoverIncidenciaModal = class extends GestorModal {
         return;
       }
       try {
-        await moverIncidencia(this.app, i.file, origen, destFunc, nuevoTipo);
+        await moverIncidencia(this.app, i.file, origen, destFunc, nuevoTipo, nuevoNombre);
         new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: incidencia actualizada.");
         this.close();
       } catch (e) {

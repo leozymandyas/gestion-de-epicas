@@ -44,6 +44,11 @@ abstract class GestorModal extends Modal {
 		this.plugin = plugin;
 	}
 
+	/** Encabezado de sección dentro del modal, para agrupar campos. */
+	protected seccion(texto: string): void {
+		this.contentEl.createEl("div", { cls: "gf-modal-seccion", text: texto });
+	}
+
 	protected campoTexto(label: string, placeholder: string): CampoTexto {
 		const wrap = this.contentEl.createDiv({ cls: "gf-campo" });
 		wrap.createEl("label", { text: label, cls: "gf-campo-label" });
@@ -493,7 +498,8 @@ export class MoverIncidenciaModal extends GestorModal {
 		this.modalEl.addClass("gf-modal-sprints");
 		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
 
-		// Origen: épica → historia → incidencia.
+		// --- Sección: seleccionar la incidencia ---
+		this.seccion("Incidencia a editar");
 		const epica = this.campoEpica(funcs);
 		const fn = this.campoFuncionalidad(epica);
 		const incCampo = this.campoSelect("Incidencia", "Seleccionar incidencia");
@@ -512,33 +518,39 @@ export class MoverIncidenciaModal extends GestorModal {
 		};
 		epica.select.addEventListener("change", repoblarInc);
 		fn.select.addEventListener("change", repoblarInc);
-		repoblarInc();
 
 		const incSel = (): files.Incidencia | null => {
 			const v = incCampo.select.value;
 			return v === "" ? null : incidencias[Number(v)] ?? null;
 		};
 
-		// Nuevo tipo (precargado con el tipo actual de la incidencia).
-		const tipo = this.campoSelect("Nuevo tipo", "Seleccionar tipo");
+		// --- Sección: cambios (nombre y tipo) ---
+		this.seccion("Cambios");
+		const nombre = this.campoTexto("Nombre", "Nombre de la incidencia");
+		const tipo = this.campoSelect("Tipo", "Seleccionar tipo");
 		this.setOpciones(
 			tipo.select,
 			"Seleccionar tipo",
 			this.plugin.settings.incidencias.map((i) => ({ value: i.nombre, label: i.nombre }))
 		);
+		// Al elegir incidencia, precarga su nombre y tipo actuales.
 		incCampo.select.addEventListener("change", () => {
 			const i = incSel();
-			if (i) tipo.select.value = i.tipoNombre;
+			if (i) {
+				nombre.input.value = i.nombre;
+				tipo.select.value = i.tipoNombre;
+			}
 		});
 
-		// Destino: épica → historia (opcional).
-		const destEpica = this.campoSelect("Mover a la épica", "Seleccionar épica");
+		// --- Sección: mover a otra épica/historia ---
+		this.seccion("Ubicación");
+		const destEpica = this.campoSelect("Épica", "Seleccionar épica");
 		this.setOpciones(
 			destEpica.select,
 			"Seleccionar épica",
 			funcs.map((f) => ({ value: f.slug, label: f.nombre }))
 		);
-		const destFn = this.campoSelect("Historia destino (opcional)", "Nivel épica");
+		const destFn = this.campoSelect("Historia (opcional)", "Nivel épica");
 		let destHist: files.FuncRef[] = [];
 		const repoblarDest = () => {
 			const e = funcs.find((f) => f.slug === destEpica.select.value);
@@ -550,10 +562,26 @@ export class MoverIncidenciaModal extends GestorModal {
 			);
 		};
 		destEpica.select.addEventListener("change", repoblarDest);
+
+		// Por defecto el destino apunta a la ubicación de origen seleccionada.
+		const sincronizarDestino = () => {
+			const ep = epica.getFunc();
+			if (ep) {
+				destEpica.select.value = ep.slug;
+				repoblarDest();
+				const h = fn.getFn();
+				if (h) destFn.select.value = h.slug;
+			}
+		};
+		epica.select.addEventListener("change", sincronizarDestino);
+		fn.select.addEventListener("change", sincronizarDestino);
+
+		repoblarInc();
 		repoblarDest();
 
 		this.botones(async () => {
 			this.limpiarError(incCampo);
+			this.limpiarError(nombre);
 			this.limpiarError(tipo);
 			this.limpiarError(destEpica);
 			const i = incSel();
@@ -562,8 +590,13 @@ export class MoverIncidenciaModal extends GestorModal {
 			const destH = destHist.find((h) => h.slug === destFn.select.value) ?? null;
 			const destFunc = destH ?? destE;
 			const nuevoTipo = tipo.select.value;
+			const nuevoNombre = nombre.input.value.trim();
 			if (!i || !origen) {
 				this.mostrarError(incCampo, "Selecciona la incidencia.");
+				return;
+			}
+			if (!nuevoNombre) {
+				this.mostrarError(nombre, "El nombre es obligatorio.");
 				return;
 			}
 			if (!destFunc) {
@@ -575,7 +608,7 @@ export class MoverIncidenciaModal extends GestorModal {
 				return;
 			}
 			try {
-				await files.moverIncidencia(this.app, i.file, origen, destFunc, nuevoTipo);
+				await files.moverIncidencia(this.app, i.file, origen, destFunc, nuevoTipo, nuevoNombre);
 				new Notice("Gestión de épicas: incidencia actualizada.");
 				this.close();
 			} catch (e) {

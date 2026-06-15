@@ -599,7 +599,16 @@ function slugCarpetaLibre(app: App, dir: string, slug: string): string {
 
 /** Devuelve un nombre de archivo .md libre dentro de `dir` (sufijo -2, -3…). */
 function slugArchivoLibre(app: App, dir: string, slug: string): string {
-	const existe = (s: string) => !!app.vault.getAbstractFileByPath(normalizePath(`${dir}/${s}.md`));
+	return slugArchivoLibreExcepto(app, dir, slug, "");
+}
+
+/** Como `slugArchivoLibre`, pero ignora el archivo en `exceptoPath` (para
+ * renombrar/mover un .md sin que choque consigo mismo). */
+function slugArchivoLibreExcepto(app: App, dir: string, slug: string, exceptoPath: string): string {
+	const existe = (s: string) => {
+		const p = normalizePath(`${dir}/${s}.md`);
+		return p !== exceptoPath && !!app.vault.getAbstractFileByPath(p);
+	};
 	if (!existe(slug)) return slug;
 	let n = 2;
 	while (existe(`${slug}-${n}`)) n++;
@@ -839,13 +848,11 @@ export async function moverIncidencia(
 	incFile: TFile,
 	origen: FuncRef,
 	destino: FuncRef,
-	nuevoTipoNombre: string
+	nuevoTipoNombre: string,
+	nuevoNombre: string
 ): Promise<void> {
-	const fm = app.metadataCache.getFileCache(incFile)?.frontmatter as
-		| Record<string, unknown>
-		| undefined;
-	const nombre = fm?.nombre ? String(fm.nombre) : incFile.basename;
 	const oldBase = incFile.basename;
+	const nombreFinal = nuevoNombre.trim() || oldBase;
 
 	// Quita la incidencia del índice de su nota de origen.
 	await quitarLineaConEnlace(app, origen.file, oldBase);
@@ -853,13 +860,24 @@ export async function moverIncidencia(
 	const nuevoSlug = slugify(nuevoTipoNombre);
 	const destDir = `${destino.folder.path}/${nuevoSlug}`;
 	await ensureFolder(app, destDir);
-	const base = slugArchivoLibre(app, destDir, oldBase);
-	await app.fileManager.renameFile(incFile, normalizePath(`${destDir}/${base}.md`));
-	await app.fileManager.processFrontMatter(incFile, (fm2: Record<string, unknown>) => {
-		fm2.tipo = nuevoSlug;
-		fm2.funcionalidad = `[[${destino.slug}]]`;
+	const deseado = slugify(nombreFinal) || oldBase;
+	const base = slugArchivoLibreExcepto(app, destDir, deseado, incFile.path);
+	const destPath = normalizePath(`${destDir}/${base}.md`);
+	if (destPath !== incFile.path) {
+		await app.fileManager.renameFile(incFile, destPath);
+	}
+	await app.fileManager.processFrontMatter(incFile, (fm: Record<string, unknown>) => {
+		fm.tipo = nuevoSlug;
+		fm.funcionalidad = `[[${destino.slug}]]`;
+		fm.nombre = nombreFinal;
 	});
+	await actualizarH1(app, incFile, nombreFinal);
 
 	// Agrega la incidencia al índice de la nota destino, en la sección de su tipo.
-	await appendToSection(app, destino.file, `## ${nuevoTipoNombre}`, `- [ ] [[${base}|${nombre}]]`);
+	await appendToSection(
+		app,
+		destino.file,
+		`## ${nuevoTipoNombre}`,
+		`- [ ] [[${base}|${nombreFinal}]]`
+	);
 }
