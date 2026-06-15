@@ -1,4 +1,4 @@
-# Gestion Producto
+# Gestion de epicas
 
 Plugin de Obsidian para Product Owners y equipos que gestionan el desarrollo de un
 producto. Concentra toda la información de una **épica** —historias, tareas,
@@ -31,22 +31,22 @@ automáticamente y con nombres "slugificados" (`Diseñar pantalla de login` →
 
 - **Panel de acciones** lateral (ícono en la barra izquierda de Obsidian) con botones
   para crear cada tipo de elemento, sin memorizar comandos.
-  
-  <img src="https://raw.githubusercontent.com/leozymandyas/plugin-gestor-funciones/main/assets/panel-acciones.png" alt="Panel de acciones" width="480">
-  
+
+  <img src="https://raw.githubusercontent.com/leozymandyas/gestion-de-epicas/main/assets/panel-acciones.png" alt="Panel de acciones" width="480">
+
 - **Comandos** en la paleta (`Cmd/Ctrl + P`): crear épica, historia, tarea,
-  pendiente, asignar sprint, asignar colaborador, cambiar estado, mover épica, y más.
-  
-  <img src="https://raw.githubusercontent.com/leozymandyas/plugin-gestor-funciones/main/assets/comandos.png" alt="Comandos" width="480">
-  
+  pendiente, asignar sprint, asignar colaborador, archivar épicas, y más.
+
+  <img src="https://raw.githubusercontent.com/leozymandyas/gestion-de-epicas/main/assets/comandos.png" alt="Comandos" width="480">
+
 - **Sprints y etiquetas** configurables para clasificar el trabajo.
-  
-  <img src="https://raw.githubusercontent.com/leozymandyas/plugin-gestor-funciones/main/assets/etiquetas-sprint.png" alt="Sprint y etiquetas" width="480">
-  
-- **Estados configurables** para las épicas (Backlog, Por hacer, En progreso, Hecho… y
-  los que tú agregues).
-  
-  <img src="https://raw.githubusercontent.com/leozymandyas/plugin-gestor-funciones/main/assets/estados-epica.png" alt="Estados épica" width="480">
+
+  <img src="https://raw.githubusercontent.com/leozymandyas/gestion-de-epicas/main/assets/etiquetas-sprint.png" alt="Sprint y etiquetas" width="480">
+
+- **Tablero Kanban** (gestión de incidencias y de historias) y vista **Roadmap** para
+  ver el avance general por estado y sprint.
+
+  <img src="https://raw.githubusercontent.com/leozymandyas/gestion-de-epicas/main/assets/roadmap.png" alt="Roadmap" width="480">
 
 ## Instalación
 
@@ -55,44 +55,34 @@ automáticamente y con nombres "slugificados" (`Diseñar pantalla de login` →
 > Disponible cuando el plugin sea aprobado en el catálogo oficial.
 
 1. Abre **Settings → Community plugins → Browse**.
-2. Busca **Gestion Producto**.
+2. Busca **Gestion de epicas**.
 3. **Install** y luego **Enable**.
 
 ### Instalación manual
 
 1. Descarga `manifest.json`, `main.js` y `styles.css` desde la
    [última Release del repositorio](../../releases/latest).
-2. Crea la carpeta `gestor-funciones` dentro de la carpeta de plugins de tu vault:
+2. Crea la carpeta `gestion-de-epicas` dentro de la carpeta de plugins de tu vault:
    ```
-   <tu-vault>/.obsidian/plugins/gestor-funciones/
+   <tu-vault>/.obsidian/plugins/gestion-de-epicas/
    ```
    > La carpeta `.obsidian` está oculta. En macOS pulsa `Cmd + Shift + .` en Finder para verla.
 3. Copia los tres archivos descargados ahí dentro.
 4. En Obsidian, ve a **Settings → Community plugins**, activa los plugins de la comunidad
-   si te lo pide y enciende **Gestion Producto**.
+   si te lo pide y enciende **Gestion de epicas**.
 
 ## Primeros pasos
 
 1. Abre el **panel de acciones** desde el ícono del plugin en la barra lateral izquierda.
 2. La primera vez, usa **"Crear carpetas de gestión"** para generar las carpetas de épicas.
 3. Crea tu primera **épica**. Se abrirá su nota principal (el dashboard).
-4. Desde ahí, agrega **historias, tareas, pendientes**, etc.
+4. Desde ahí, agrega **historias, tareas y pendientes**.
 5. Abre el **Kanban** o el **Roadmap** desde el panel para ver el avance general.
 
 ## Configuración
 
-En **Settings → Gestion Producto** puedes personalizar:
-
-- **Estados de épica**: los estados disponibles (los predeterminados no se pueden borrar;
-  puedes añadir los tuyos).
-- **Etiquetas de sprint**: etiquetas con color para clasificar el trabajo en los sprints.
-
-## Integración con IA (opcional)
-
-El repositorio incluye, en la carpeta [`mcp/`](mcp/), un servidor **MCP** opcional que
-permite gestionar tus épicas, tareas y notas hablándole en lenguaje natural a un
-asistente de IA (como Claude). Funciona en local y es completamente opcional: el plugin
-no lo necesita para funcionar. Si te interesa, consulta [`mcp/README.md`](mcp/README.md).
+En **Settings → Gestion de epicas** puedes personalizar las etiquetas de sprint, los
+estados y las opciones de incidencias e historias.
 
 ## Desarrollo
 

@@ -137,7 +137,8 @@ function itemTarea(
 ): HTMLElement {
 	const app = plugin.app;
 	const completado =
-		app.metadataCache.getFileCache(file)?.frontmatter?.estado === "completado";
+		(app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined)
+			?.estado === "completado";
 	const li = ul.createEl("li", { cls: "task-list-item gf-tarea-item" });
 	if (completado) li.addClass("is-checked");
 
