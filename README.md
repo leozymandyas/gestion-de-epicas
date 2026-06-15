@@ -30,8 +30,6 @@ Cada elemento se guarda como una nota Markdown con su frontmatter, organizada au
 
 ### Desde Community Plugins de Obsidian
 
-> 🕐 Disponible una vez que el plugin sea aprobado en el catálogo oficial.
-
 1. Abre **Settings → Community plugins → Browse**.
 2. Busca **Gestion de epicas**.
 3. Haz clic en **Install** y luego en **Enable**.
@@ -96,5 +94,7 @@ npm run build   # Verifica tipos y genera main.js de producción
 ## ☕ ¿Te resulta útil?
 
 Si este plugin te ahorra tiempo en tu día a día, considera invitarme un café. ¡Ayuda a seguir mejorándolo!
+
+**[Buy Me a Coffee](https://buymeacoffee.com/leonardoruano)**  
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-buymeacoffee.com%2Fleonardoruano-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/leonardoruano)
