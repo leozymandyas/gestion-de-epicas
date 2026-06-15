@@ -1305,6 +1305,11 @@ var GestorSettingTab = class extends import_obsidian4.PluginSettingTab {
         }
       ]
     );
+    new import_obsidian4.Setting(containerEl).setName("Apoyar el desarrollo").setDesc("Si este plugin te resulta \xFAtil, puedes invitarme un caf\xE9.").addButton(
+      (btn) => btn.setButtonText("Buy Me a Coffee").setCta().onClick(() => {
+        window.open("https://buymeacoffee.com/leonardoruano");
+      })
+    );
   }
   /** Tarjeta con título, descripción a la izquierda y botones a la derecha. */
   renderTarjeta(titulo, desc, acciones) {

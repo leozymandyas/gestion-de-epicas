@@ -170,6 +170,18 @@ export class GestorSettingTab extends PluginSettingTab {
 				},
 			]
 		);
+
+		new Setting(containerEl)
+			.setName("Apoyar el desarrollo")
+			.setDesc("Si este plugin te resulta útil, puedes invitarme un café.")
+			.addButton((btn) =>
+				btn
+					.setButtonText("Buy Me a Coffee")
+					.setCta()
+					.onClick(() => {
+						window.open("https://buymeacoffee.com/leonardoruano");
+					})
+			);
 	}
 
 	/** Tarjeta con título, descripción a la izquierda y botones a la derecha. */
