@@ -28,8 +28,8 @@ export function crearMultiSelect(opts: {
 	const setAbierto = (v: boolean) => {
 		abierto = v;
 		panel.toggleClass("gf-multiselect-abierto", v);
-		if (v) document.addEventListener("click", onDocClick);
-		else document.removeEventListener("click", onDocClick);
+		if (v) activeDocument.addEventListener("click", onDocClick);
+		else activeDocument.removeEventListener("click", onDocClick);
 	};
 	setAbierto(false);
 
@@ -106,14 +106,14 @@ export function crearSelect(opts: {
 		if (!abierto) return;
 		abierto = false;
 		panel.remove();
-		document.removeEventListener("click", onDocClick, true);
+		activeDocument.removeEventListener("click", onDocClick, true);
 		window.removeEventListener("scroll", onScroll, true);
 		window.removeEventListener("resize", cerrar);
-		document.removeEventListener("keydown", onKey, true);
+		activeDocument.removeEventListener("keydown", onKey, true);
 	}
 	function abrir(): void {
 		if (abierto || disabled) return;
-		document.body.appendChild(panel);
+		activeDocument.body.appendChild(panel);
 		const r = btn.getBoundingClientRect();
 		panel.setCssStyles({
 			top: `${r.bottom + 4}px`,
@@ -123,10 +123,10 @@ export function crearSelect(opts: {
 		});
 		abierto = true;
 		window.setTimeout(() => {
-			document.addEventListener("click", onDocClick, true);
+			activeDocument.addEventListener("click", onDocClick, true);
 			window.addEventListener("scroll", onScroll, true);
 			window.addEventListener("resize", cerrar);
-			document.addEventListener("keydown", onKey, true);
+			activeDocument.addEventListener("keydown", onKey, true);
 		}, 0);
 	}
 	const setAbierto = (v: boolean) => {

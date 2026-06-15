@@ -111,23 +111,23 @@ export function renderSelectorColor(
 		if (!abierto) return;
 		abierto = false;
 		panel.remove();
-		document.removeEventListener("click", onDocClick, true);
+		activeDocument.removeEventListener("click", onDocClick, true);
 		window.removeEventListener("scroll", cerrar, true);
 		window.removeEventListener("resize", cerrar);
-		document.removeEventListener("keydown", onKey, true);
+		activeDocument.removeEventListener("keydown", onKey, true);
 	}
 	const abrir = () => {
 		if (abierto) return;
-		document.body.appendChild(panel);
+		activeDocument.body.appendChild(panel);
 		const r = btn.getBoundingClientRect();
 		panel.setCssStyles({ top: `${r.bottom + 4}px`, left: `${r.left}px`, display: "block" });
 		abierto = true;
 		// Diferido para no capturar el mismo clic que abre.
 		window.setTimeout(() => {
-			document.addEventListener("click", onDocClick, true);
+			activeDocument.addEventListener("click", onDocClick, true);
 			window.addEventListener("scroll", cerrar, true);
 			window.addEventListener("resize", cerrar);
-			document.addEventListener("keydown", onKey, true);
+			activeDocument.addEventListener("keydown", onKey, true);
 		}, 0);
 	};
 

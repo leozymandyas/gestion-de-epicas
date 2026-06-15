@@ -16,6 +16,10 @@ export interface PorEpica {
 	epicas: FuncRef[];
 	cargar: (epica: FuncRef) => Etiqueta[];
 	guardar: (epica: FuncRef, lista: Etiqueta[]) => Promise<void>;
+	/** Propaga el renombrado de una etiqueta a las notas de la épica. */
+	renombrar?: (epica: FuncRef, anterior: string, nuevo: string) => Promise<void>;
+	/** Propaga el borrado de una etiqueta a las notas de la épica. */
+	eliminar?: (epica: FuncRef, nombre: string) => Promise<void>;
 }
 
 export interface OpcionesGestorEtiquetas {
@@ -36,6 +40,12 @@ export interface OpcionesGestorEtiquetas {
 	guardar?: () => Promise<void>;
 	/** Si se define, el modal gestiona etiquetas por épica con un selector arriba. */
 	porEpica?: PorEpica;
+	/** Propaga el renombrado de una etiqueta a las notas del sistema (modo lista). */
+	alRenombrar?: (anterior: string, nuevo: string) => Promise<void>;
+	/** Propaga el borrado de una etiqueta a las notas del sistema (modo lista). */
+	alEliminar?: (nombre: string) => Promise<void>;
+	/** Texto extra de advertencia mostrado al confirmar un borrado. */
+	avisoEliminar?: string;
 }
 
 /** Vista mínima de un elemento con bandera de visibilidad (carriles). */
@@ -53,6 +63,9 @@ export class GestorEtiquetasModal extends Modal {
 	private opts: OpcionesGestorEtiquetas;
 	private tab: string;
 	private seleccionado: number | null = null;
+	/** Índice de fila que debe entrar en edición de nombre tras renderizar (al
+	 * pulsar ＋), para escribir el nombre de inmediato sin doble clic. */
+	private editarAlAgregar: number | null = null;
 	/** Filas renderizadas, para actualizar la selección sin reconstruir todo. */
 	private filas: HTMLElement[] = [];
 	private delBtn: HTMLButtonElement | null = null;
@@ -211,6 +224,12 @@ export class GestorEtiquetasModal extends Modal {
 			this.editarNombre(tdNombre, nombre, i);
 		});
 
+		// Fila recién creada con ＋: entra en edición de nombre de inmediato.
+		if (this.editarAlAgregar === i) {
+			this.editarAlAgregar = null;
+			window.setTimeout(() => this.editarNombre(tdNombre, nombre, i), 0);
+		}
+
 		// Checkbox de visibilidad al final de la fila (carriles).
 		if (this.opts.conVisible) {
 			const tdVis = tr.createEl("td", { cls: "gf-etq-visible-td" });
@@ -231,14 +250,18 @@ export class GestorEtiquetasModal extends Modal {
 
 	private async agregar(): Promise<void> {
 		const items = this.listaActiva();
-		const base = this.opts.nuevoNombre ?? "Sin título";
-		let nombre = base;
-		let n = 2;
-		while (items.some((e) => e.nombre === nombre)) nombre = `${base} ${n++}`;
+		const base = this.opts.nuevoNombre ?? "Etiqueta";
+		// Nombre por defecto secuencial ("Etiqueta 1", "Etiqueta 2", …) que se
+		// conserva si el usuario no escribe otro.
+		let n = 1;
+		let nombre = `${base} ${n}`;
+		while (items.some((e) => e.nombre === nombre)) nombre = `${base} ${++n}`;
 		const color = colorAleatorio();
 		items.push(this.opts.nuevoItem ? this.opts.nuevoItem(nombre, color) : { nombre, color });
 		await this.guardar();
 		this.seleccionado = items.length - 1;
+		// La fila nueva entra directamente en edición de nombre.
+		this.editarAlAgregar = this.seleccionado;
 		this.render();
 	}
 
@@ -248,10 +271,22 @@ export class GestorEtiquetasModal extends Modal {
 		const idx = this.seleccionado;
 		const item = items[idx];
 		if (!item || !this.puedeEliminar(idx)) return;
-		new ConfirmarModal(this.app, `¿Eliminar "${item.nombre}"?`, async () => {
+		const nombreItem = item.nombre;
+		const mensaje = `¿Eliminar "${nombreItem}"?`;
+		new ConfirmarModal(this.app, mensaje, this.opts.avisoEliminar, async () => {
 			items.splice(idx, 1);
 			this.seleccionado = null;
 			await this.guardar();
+			// Propaga el borrado a las notas que usan la etiqueta.
+			try {
+				if (this.opts.porEpica) {
+					if (this.epicaActual) await this.opts.porEpica.eliminar?.(this.epicaActual, nombreItem);
+				} else {
+					await this.opts.alEliminar?.(nombreItem);
+				}
+			} catch (e) {
+				console.error(e);
+			}
 			this.render();
 		}).open();
 	}
@@ -289,6 +324,18 @@ export class GestorEtiquetasModal extends Modal {
 			terminado = true;
 			items[indice].nombre = valor;
 			await this.guardar();
+			// Propaga el renombrado a las notas que usan la etiqueta.
+			try {
+				if (this.opts.porEpica) {
+					if (this.epicaActual) {
+						await this.opts.porEpica.renombrar?.(this.epicaActual, original, valor);
+					}
+				} else {
+					await this.opts.alRenombrar?.(original, valor);
+				}
+			} catch (e) {
+				console.error(e);
+			}
 			this.render();
 		};
 
@@ -316,6 +363,7 @@ class ConfirmarModal extends Modal {
 	constructor(
 		app: App,
 		private mensaje: string,
+		private aviso: string | undefined,
 		private onConfirmar: () => void | Promise<void>
 	) {
 		super(app);
@@ -324,6 +372,7 @@ class ConfirmarModal extends Modal {
 	onOpen(): void {
 		this.titleEl.setText("Confirmar");
 		this.contentEl.createEl("p", { text: this.mensaje });
+		if (this.aviso) this.contentEl.createEl("p", { cls: "gf-campo-aviso", text: this.aviso });
 		const row = this.contentEl.createDiv({ cls: "gf-botones" });
 		const cancelar = row.createEl("button", { text: "Cancelar" });
 		cancelar.addEventListener("click", () => this.close());

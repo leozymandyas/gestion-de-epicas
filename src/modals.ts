@@ -344,9 +344,12 @@ export class CrearFuncionalidadModal extends GestorModal {
 					if (ref) await files.guardarSprints(this.app, ref, sps);
 				}
 				if (this.crearNuevo) {
+					// Se conserva el resto del formulario (sprints, etc.); solo se
+					// limpia el nombre para crear la siguiente.
 					new Notice(`Gestión de épicas: épica "${valor}" creada.`);
-					this.contentEl.empty();
-					this.onOpen();
+					nombre.input.value = "";
+					this.limpiarError(nombre);
+					nombre.input.focus();
 				} else {
 					this.close();
 					await this.abrirNota(file);
@@ -361,6 +364,51 @@ export class CrearFuncionalidadModal extends GestorModal {
 			}
 		});
 		nombre.input.focus();
+	}
+}
+
+/** Editar el nombre visible de una épica o de una historia. */
+export class EditarNombreModal extends GestorModal {
+	onOpen(): void {
+		this.titleEl.setText("Editar nombre");
+		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+		const epica = this.campoEpica(funcs);
+		const fn = this.campoFuncionalidad(epica);
+		const nombre = this.campoTexto("Nuevo nombre", "Escribe el nuevo nombre");
+
+		const objetivo = (): files.FuncRef | null => fn.getFn() ?? epica.getFunc() ?? null;
+		const sincronizar = () => {
+			const o = objetivo();
+			nombre.input.value = o ? o.nombre : "";
+		};
+		epica.select.addEventListener("change", sincronizar);
+		fn.select.addEventListener("change", sincronizar);
+		sincronizar();
+
+		this.botones(async () => {
+			this.limpiarError(epica);
+			this.limpiarError(nombre);
+			const o = objetivo();
+			const valor = nombre.input.value.trim();
+			if (!o) {
+				this.mostrarError(epica, MSG_OBLIGATORIO);
+				return;
+			}
+			if (!valor) {
+				this.mostrarError(nombre, "El nombre es obligatorio.");
+				return;
+			}
+			try {
+				await files.renombrarFuncionalidad(this.app, o, valor);
+				new Notice("Gestión de épicas: nombre actualizado.");
+				this.close();
+			} catch (e) {
+				console.error(e);
+				new Notice("Gestión de épicas: no se pudo renombrar.");
+			}
+		}, "Guardar");
+
+		if (funcs.length === 0) this.sinEpicas(epica);
 	}
 }
 
@@ -782,6 +830,8 @@ function renderListaSprints(
 	edicion: Map<number, files.EtiquetaSprint[]>,
 	scrollSprint?: number
 ): void {
+	// Conserva el scroll de la tabla al repintar (al marcar/desmarcar un sprint).
+	const scrollPrevio = cont.scrollTop;
 	cont.empty();
 	const disponibles = plugin.settings.etiquetas.filter((e) => e.visible !== false);
 	const colorEtiqueta = (nombre: string) =>
@@ -816,8 +866,12 @@ function renderListaSprints(
 			renderListaSprints(plugin, cont, edicion, scrollSprint);
 		});
 	}
-	if (scrollSprint) {
+	// En el primer render (sin scroll) se centra el sprint indicado; en los
+	// repintados posteriores se restaura la posición que tenía la tabla.
+	if (scrollPrevio === 0 && scrollSprint) {
 		cont.querySelector(`[data-sprint="${scrollSprint}"]`)?.scrollIntoView({ block: "center" });
+	} else {
+		cont.scrollTop = scrollPrevio;
 	}
 }
 
@@ -969,23 +1023,23 @@ export function crearSelectorEtiquetas(opts: {
 		if (!abierto) return;
 		abierto = false;
 		panel.remove();
-		document.removeEventListener("click", onDocClick, true);
+		activeDocument.removeEventListener("click", onDocClick, true);
 		window.removeEventListener("scroll", onScroll, true);
 		window.removeEventListener("resize", cerrar);
-		document.removeEventListener("keydown", onKey, true);
+		activeDocument.removeEventListener("keydown", onKey, true);
 	}
 	function abrir(): void {
 		if (abierto) return;
 		renderPanel();
-		document.body.appendChild(panel);
+		activeDocument.body.appendChild(panel);
 		const r = btn.getBoundingClientRect();
 		panel.setCssStyles({ top: `${r.bottom + 4}px`, left: `${r.left}px`, display: "block" });
 		abierto = true;
 		window.setTimeout(() => {
-			document.addEventListener("click", onDocClick, true);
+			activeDocument.addEventListener("click", onDocClick, true);
 			window.addEventListener("scroll", onScroll, true);
 			window.addEventListener("resize", cerrar);
-			document.addEventListener("keydown", onKey, true);
+			activeDocument.addEventListener("keydown", onKey, true);
 		}, 0);
 	}
 	btn.addEventListener("click", (e) => {
@@ -1508,9 +1562,12 @@ export class CrearFuncionalidadNuevaModal extends GestorModal {
 					await files.guardarEtiquetasHistoria(this.app, file, [...seleccion]);
 				}
 				if (this.crearNuevo) {
+					// Se conserva la épica y las etiquetas elegidas; solo se limpia
+					// el nombre para crear la siguiente historia.
 					new Notice(`Gestión de épicas: historia "${valor}" creada.`);
-					this.contentEl.empty();
-					this.onOpen();
+					nombre.input.value = "";
+					this.limpiarError(nombre);
+					nombre.input.focus();
 				} else {
 					this.close();
 					await this.abrirNota(file);

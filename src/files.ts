@@ -12,7 +12,7 @@ export function leerEtiquetasEpica(app: App, epica: FuncRef): Etiqueta[] {
 		| undefined;
 	if (!Array.isArray(fm?.etiquetas)) return [];
 	const out: Etiqueta[] = [];
-	for (const x of fm!.etiquetas as unknown[]) {
+	for (const x of fm.etiquetas as unknown[]) {
 		if (!x || typeof x !== "object") continue;
 		const o = x as Record<string, unknown>;
 		const nombre = String(o.nombre ?? "").trim();
@@ -46,7 +46,7 @@ export function leerEtiquetasHistoria(app: App, file: TFile): string[] {
 	const fm = app.metadataCache.getFileCache(file)?.frontmatter as
 		| Record<string, unknown>
 		| undefined;
-	return Array.isArray(fm?.etiquetas) ? (fm!.etiquetas as unknown[]).map(String) : [];
+	return Array.isArray(fm?.etiquetas) ? (fm.etiquetas as unknown[]).map(String) : [];
 }
 
 /** Guarda las etiquetas asignadas a una historia (lista de nombres). */
@@ -564,4 +564,187 @@ export async function createPendiente(
 	// appendToSection crea la sección ## Pendientes si la nota principal no la tiene.
 	await appendToSection(app, func.file, "## Pendientes", `- [ ] [[${base}|${nombre}]] — ${fecha}`);
 	return file;
+}
+
+// ===== Renombrado de épicas/historias y propagación de etiquetas =====
+
+/** Todas las funcionalidades gestionadas: épicas y sus historias. */
+export function listTodasFunc(app: App, adminPath: string): FuncRef[] {
+	const out: FuncRef[] = [];
+	for (const ep of listFuncionalidades(app, adminPath)) {
+		out.push(ep);
+		out.push(...listFuncionalidadesDe(app, ep.folder));
+	}
+	return out;
+}
+
+/** Renombra una épica/historia: actualiza el `nombre` del frontmatter y el primer
+ * encabezado H1 de su nota principal. El slug (carpeta) no cambia, para no romper
+ * los enlaces internos que lo referencian. */
+export async function renombrarFuncionalidad(
+	app: App,
+	ref: FuncRef,
+	nuevoNombre: string
+): Promise<void> {
+	await app.fileManager.processFrontMatter(ref.file, (fm: Record<string, unknown>) => {
+		fm.nombre = nuevoNombre;
+	});
+	await app.vault.process(ref.file, (content) => {
+		const lines = content.split("\n");
+		const i = lines.findIndex((l) => /^#\s+/.test(l));
+		if (i !== -1) lines[i] = `# ${nuevoNombre}`;
+		return lines.join("\n");
+	});
+}
+
+/** Reemplaza el encabezado `## anterior` por `## nuevo` en una nota. */
+async function renombrarSeccion(
+	app: App,
+	file: TFile,
+	anterior: string,
+	nuevo: string
+): Promise<void> {
+	await app.vault.process(file, (content) => {
+		const lines = content.split("\n");
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].trim() === `## ${anterior}`) lines[i] = `## ${nuevo}`;
+		}
+		return lines.join("\n");
+	});
+}
+
+/** Etiquetas de sprint: actualiza el nombre en todos los sprints.md. */
+export async function renombrarEtiquetaSprint(
+	app: App,
+	adminPath: string,
+	anterior: string,
+	nuevo: string
+): Promise<void> {
+	for (const f of listTodasFunc(app, adminPath)) {
+		const sprints = await leerSprints(app, f);
+		let cambio = false;
+		for (const s of sprints) {
+			for (const e of s.etiquetas) if (e.nombre === anterior) {
+				e.nombre = nuevo;
+				cambio = true;
+			}
+		}
+		if (cambio) await guardarSprints(app, f, sprints);
+	}
+}
+
+export async function eliminarEtiquetaSprint(
+	app: App,
+	adminPath: string,
+	nombre: string
+): Promise<void> {
+	for (const f of listTodasFunc(app, adminPath)) {
+		const sprints = await leerSprints(app, f);
+		let cambio = false;
+		for (const s of sprints) {
+			const antes = s.etiquetas.length;
+			s.etiquetas = s.etiquetas.filter((e) => e.nombre !== nombre);
+			if (s.etiquetas.length !== antes) cambio = true;
+		}
+		if (cambio) await guardarSprints(app, f, sprints);
+	}
+}
+
+/** Colaboradores: actualiza el frontmatter `asignados` de todas las incidencias. */
+export async function renombrarColaborador(
+	app: App,
+	adminPath: string,
+	tipos: { nombre: string }[],
+	anterior: string,
+	nuevo: string
+): Promise<void> {
+	for (const f of listTodasFunc(app, adminPath)) {
+		for (const inc of listIncidencias(app, f, tipos)) {
+			const asign = getAsignados(app, inc.file);
+			if (!asign.includes(anterior)) continue;
+			const nuevos = [...new Set(asign.map((a) => (a === anterior ? nuevo : a)))].sort((a, b) =>
+				a.localeCompare(b, "es")
+			);
+			await app.fileManager.processFrontMatter(inc.file, (fm: Record<string, unknown>) => {
+				fm.asignados = nuevos;
+			});
+		}
+	}
+}
+
+export async function eliminarColaborador(
+	app: App,
+	adminPath: string,
+	tipos: { nombre: string }[],
+	nombre: string
+): Promise<void> {
+	for (const f of listTodasFunc(app, adminPath)) {
+		for (const inc of listIncidencias(app, f, tipos)) {
+			const asign = getAsignados(app, inc.file);
+			if (!asign.includes(nombre)) continue;
+			await app.fileManager.processFrontMatter(inc.file, (fm: Record<string, unknown>) => {
+				fm.asignados = asign.filter((a) => a !== nombre);
+			});
+		}
+	}
+}
+
+/** Etiquetas de épica: actualiza el frontmatter `etiquetas` de sus historias. */
+export async function renombrarEtiquetaHistoria(
+	app: App,
+	epica: FuncRef,
+	anterior: string,
+	nuevo: string
+): Promise<void> {
+	for (const h of listFuncionalidadesDe(app, epica.folder)) {
+		const etqs = leerEtiquetasHistoria(app, h.file);
+		if (etqs.includes(anterior)) {
+			await guardarEtiquetasHistoria(app, h.file, etqs.map((e) => (e === anterior ? nuevo : e)));
+		}
+	}
+}
+
+export async function eliminarEtiquetaHistoria(
+	app: App,
+	epica: FuncRef,
+	nombre: string
+): Promise<void> {
+	for (const h of listFuncionalidadesDe(app, epica.folder)) {
+		const etqs = leerEtiquetasHistoria(app, h.file);
+		if (etqs.includes(nombre)) {
+			await guardarEtiquetasHistoria(app, h.file, etqs.filter((e) => e !== nombre));
+		}
+	}
+}
+
+/** Tipos de incidencia: renombra la carpeta (slug) que las contiene, actualiza el
+ * frontmatter `tipo` de cada nota y el encabezado de sección de la nota principal. */
+export async function renombrarTipoIncidencia(
+	app: App,
+	adminPath: string,
+	anterior: string,
+	nuevo: string
+): Promise<void> {
+	const slugAnt = slugify(anterior);
+	const slugNue = slugify(nuevo);
+	for (const f of listTodasFunc(app, adminPath)) {
+		const dir = f.folder.children.find(
+			(c): c is TFolder => c instanceof TFolder && c.name === slugAnt
+		);
+		if (!dir) continue;
+		for (const child of dir.children) {
+			if (child instanceof TFile && child.extension === "md") {
+				await app.fileManager.processFrontMatter(child, (fm: Record<string, unknown>) => {
+					fm.tipo = slugNue;
+				});
+			}
+		}
+		await renombrarSeccion(app, f.file, anterior, nuevo);
+		if (slugNue !== slugAnt) {
+			const destino = normalizePath(`${f.folder.path}/${slugNue}`);
+			if (!app.vault.getAbstractFileByPath(destino)) {
+				await app.fileManager.renameFile(dir, destino);
+			}
+		}
+	}
 }

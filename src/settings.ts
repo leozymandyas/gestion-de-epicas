@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type GestorFuncionesPlugin from "./main";
-import { CARPETA_ACTIVAS } from "./files";
+import { CARPETA_ACTIVAS, eliminarEtiquetaSprint, renombrarEtiquetaSprint } from "./files";
 import { slugify } from "./utils";
 import { ExportarConfigModal, ImportarConfigModal } from "./config-io";
 import { GestorEtiquetasModal } from "./etiquetas-modal";
@@ -241,6 +241,11 @@ export class GestorSettingTab extends PluginSettingTab {
 			new GestorEtiquetasModal(this.plugin, {
 				titulo: "Configurar equipos",
 				conVisible: true,
+				avisoEliminar: "Se quitará de todos los sprints donde esté asignada. No se elimina ninguna carpeta.",
+				alRenombrar: (ant, nue) =>
+					renombrarEtiquetaSprint(this.plugin.app, this.plugin.settings.carpetaAdmin, ant, nue),
+				alEliminar: (nombre) =>
+					eliminarEtiquetaSprint(this.plugin.app, this.plugin.settings.carpetaAdmin, nombre),
 				secciones: [
 					{
 						id: "sprint",

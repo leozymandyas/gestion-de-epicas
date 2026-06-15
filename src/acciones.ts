@@ -23,10 +23,11 @@ const REGISTRO: Accion[] = [
 	// Épicas — administración
 	{ id: "crear-epica", icono: "folder-plus", texto: "Crear épica", accion: (p) => p.abrirModal("funcionalidad") },
 	{ id: "crear-funcionalidad", icono: "puzzle", texto: "Crear historia", accion: (p) => p.abrirModal("crearfn") },
+	{ id: "asignar-sprint", icono: "calendar-days", texto: "Asignar sprint", accion: (p) => p.abrirModal("sprint") },
 	{ id: "etiquetas-epica", icono: "tags", texto: "Configurar etiquetas", accion: (p) => p.abrirModal("etiquetasEpica") },
 	{ id: "asignar-etiquetas", icono: "tag", texto: "Etiquetar historias", accion: (p) => p.abrirModal("asignarEtiquetas") },
+	{ id: "editar-nombre", icono: "pencil", texto: "Editar nombre", accion: (p) => p.abrirModal("editarNombre") },
 	{ id: "archivar-epica", icono: "archive", texto: "Archivar épicas", accion: (p) => p.abrirModal("mover") },
-	{ id: "asignar-sprint", icono: "calendar-days", texto: "Asignar sprint", accion: (p) => p.abrirModal("sprint") },
 	// Épicas — tableros
 	{ id: "roadmap", icono: "map", texto: "Roadmap", accion: (p) => void p.abrirRoadmap() },
 	{ id: "gestor-funcionalidades", icono: "kanban-square", texto: "Gestión de historias", accion: (p) => void p.abrirGestorFuncionalidades() },
@@ -45,7 +46,7 @@ const POR_ID = new Map(REGISTRO.map((a) => [a.id, a]));
 
 /** Estructura de secciones del panel; `fija` = no se puede ocultar. */
 const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }> = [
-	{ id: "epicas-admin", titulo: "Administración", acciones: ["crear-epica", "crear-funcionalidad", "etiquetas-epica", "asignar-etiquetas", "archivar-epica"] },
+	{ id: "epicas-admin", titulo: "Administración", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas", "editar-nombre", "archivar-epica"] },
 	{ id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
 	{ id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia"] },
 	{ id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },

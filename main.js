@@ -565,6 +565,133 @@ async function createPendiente(app, func, base, nombre, fecha) {
   await appendToSection(app, func.file, "## Pendientes", `- [ ] [[${base}|${nombre}]] \u2014 ${fecha}`);
   return file;
 }
+function listTodasFunc(app, adminPath) {
+  const out = [];
+  for (const ep of listFuncionalidades(app, adminPath)) {
+    out.push(ep);
+    out.push(...listFuncionalidadesDe(app, ep.folder));
+  }
+  return out;
+}
+async function renombrarFuncionalidad(app, ref, nuevoNombre) {
+  await app.fileManager.processFrontMatter(ref.file, (fm) => {
+    fm.nombre = nuevoNombre;
+  });
+  await app.vault.process(ref.file, (content) => {
+    const lines = content.split("\n");
+    const i = lines.findIndex((l) => /^#\s+/.test(l));
+    if (i !== -1)
+      lines[i] = `# ${nuevoNombre}`;
+    return lines.join("\n");
+  });
+}
+async function renombrarSeccion(app, file, anterior, nuevo) {
+  await app.vault.process(file, (content) => {
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim() === `## ${anterior}`)
+        lines[i] = `## ${nuevo}`;
+    }
+    return lines.join("\n");
+  });
+}
+async function renombrarEtiquetaSprint(app, adminPath, anterior, nuevo) {
+  for (const f of listTodasFunc(app, adminPath)) {
+    const sprints = await leerSprints(app, f);
+    let cambio = false;
+    for (const s of sprints) {
+      for (const e of s.etiquetas)
+        if (e.nombre === anterior) {
+          e.nombre = nuevo;
+          cambio = true;
+        }
+    }
+    if (cambio)
+      await guardarSprints(app, f, sprints);
+  }
+}
+async function eliminarEtiquetaSprint(app, adminPath, nombre) {
+  for (const f of listTodasFunc(app, adminPath)) {
+    const sprints = await leerSprints(app, f);
+    let cambio = false;
+    for (const s of sprints) {
+      const antes = s.etiquetas.length;
+      s.etiquetas = s.etiquetas.filter((e) => e.nombre !== nombre);
+      if (s.etiquetas.length !== antes)
+        cambio = true;
+    }
+    if (cambio)
+      await guardarSprints(app, f, sprints);
+  }
+}
+async function renombrarColaborador(app, adminPath, tipos, anterior, nuevo) {
+  for (const f of listTodasFunc(app, adminPath)) {
+    for (const inc of listIncidencias(app, f, tipos)) {
+      const asign = getAsignados(app, inc.file);
+      if (!asign.includes(anterior))
+        continue;
+      const nuevos = [...new Set(asign.map((a) => a === anterior ? nuevo : a))].sort(
+        (a, b) => a.localeCompare(b, "es")
+      );
+      await app.fileManager.processFrontMatter(inc.file, (fm) => {
+        fm.asignados = nuevos;
+      });
+    }
+  }
+}
+async function eliminarColaborador(app, adminPath, tipos, nombre) {
+  for (const f of listTodasFunc(app, adminPath)) {
+    for (const inc of listIncidencias(app, f, tipos)) {
+      const asign = getAsignados(app, inc.file);
+      if (!asign.includes(nombre))
+        continue;
+      await app.fileManager.processFrontMatter(inc.file, (fm) => {
+        fm.asignados = asign.filter((a) => a !== nombre);
+      });
+    }
+  }
+}
+async function renombrarEtiquetaHistoria(app, epica, anterior, nuevo) {
+  for (const h of listFuncionalidadesDe(app, epica.folder)) {
+    const etqs = leerEtiquetasHistoria(app, h.file);
+    if (etqs.includes(anterior)) {
+      await guardarEtiquetasHistoria(app, h.file, etqs.map((e) => e === anterior ? nuevo : e));
+    }
+  }
+}
+async function eliminarEtiquetaHistoria(app, epica, nombre) {
+  for (const h of listFuncionalidadesDe(app, epica.folder)) {
+    const etqs = leerEtiquetasHistoria(app, h.file);
+    if (etqs.includes(nombre)) {
+      await guardarEtiquetasHistoria(app, h.file, etqs.filter((e) => e !== nombre));
+    }
+  }
+}
+async function renombrarTipoIncidencia(app, adminPath, anterior, nuevo) {
+  const slugAnt = slugify(anterior);
+  const slugNue = slugify(nuevo);
+  for (const f of listTodasFunc(app, adminPath)) {
+    const dir = f.folder.children.find(
+      (c) => c instanceof import_obsidian.TFolder && c.name === slugAnt
+    );
+    if (!dir)
+      continue;
+    for (const child of dir.children) {
+      if (child instanceof import_obsidian.TFile && child.extension === "md") {
+        await app.fileManager.processFrontMatter(child, (fm) => {
+          fm.tipo = slugNue;
+        });
+      }
+    }
+    await renombrarSeccion(app, f.file, anterior, nuevo);
+    if (slugNue !== slugAnt) {
+      const destino = (0, import_obsidian.normalizePath)(`${f.folder.path}/${slugNue}`);
+      if (!app.vault.getAbstractFileByPath(destino)) {
+        await app.fileManager.renameFile(dir, destino);
+      }
+    }
+  }
+}
 
 // src/config-io.ts
 var import_obsidian2 = require("obsidian");
@@ -674,10 +801,10 @@ var CATEGORIAS = [
 function descargarJson(nombre, contenido) {
   const blob = new Blob([contenido], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const a = activeDocument.createElement("a");
   a.href = url;
   a.download = nombre;
-  document.body.appendChild(a);
+  activeDocument.body.appendChild(a);
   a.click();
   a.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1e3);
@@ -906,23 +1033,23 @@ function renderSelectorColor(parent, inicial = colorAleatorio(), onChange, onInt
       return;
     abierto = false;
     panel.remove();
-    document.removeEventListener("click", onDocClick, true);
+    activeDocument.removeEventListener("click", onDocClick, true);
     window.removeEventListener("scroll", cerrar, true);
     window.removeEventListener("resize", cerrar);
-    document.removeEventListener("keydown", onKey, true);
+    activeDocument.removeEventListener("keydown", onKey, true);
   }
   const abrir = () => {
     if (abierto)
       return;
-    document.body.appendChild(panel);
+    activeDocument.body.appendChild(panel);
     const r = btn.getBoundingClientRect();
     panel.setCssStyles({ top: `${r.bottom + 4}px`, left: `${r.left}px`, display: "block" });
     abierto = true;
     window.setTimeout(() => {
-      document.addEventListener("click", onDocClick, true);
+      activeDocument.addEventListener("click", onDocClick, true);
       window.addEventListener("scroll", cerrar, true);
       window.addEventListener("resize", cerrar);
-      document.addEventListener("keydown", onKey, true);
+      activeDocument.addEventListener("keydown", onKey, true);
     }, 0);
   };
   btn.addEventListener("click", (e) => {
@@ -950,6 +1077,9 @@ var _GestorEtiquetasModal = class _GestorEtiquetasModal extends import_obsidian3
     var _a, _b, _c;
     super(plugin.app);
     this.seleccionado = null;
+    /** Índice de fila que debe entrar en edición de nombre tras renderizar (al
+     * pulsar ＋), para escribir el nombre de inmediato sin doble clic. */
+    this.editarAlAgregar = null;
     /** Filas renderizadas, para actualizar la selección sin reconstruir todo. */
     this.filas = [];
     this.delBtn = null;
@@ -1091,6 +1221,10 @@ var _GestorEtiquetasModal = class _GestorEtiquetasModal extends import_obsidian3
       this.seleccionar(i);
       this.editarNombre(tdNombre, nombre, i);
     });
+    if (this.editarAlAgregar === i) {
+      this.editarAlAgregar = null;
+      window.setTimeout(() => this.editarNombre(tdNombre, nombre, i), 0);
+    }
     if (this.opts.conVisible) {
       const tdVis = tr.createEl("td", { cls: "gf-etq-visible-td" });
       tdVis.addEventListener("click", (e) => e.stopPropagation());
@@ -1109,15 +1243,16 @@ var _GestorEtiquetasModal = class _GestorEtiquetasModal extends import_obsidian3
   async agregar() {
     var _a;
     const items = this.listaActiva();
-    const base = (_a = this.opts.nuevoNombre) != null ? _a : "Sin t\xEDtulo";
-    let nombre = base;
-    let n = 2;
+    const base = (_a = this.opts.nuevoNombre) != null ? _a : "Etiqueta";
+    let n = 1;
+    let nombre = `${base} ${n}`;
     while (items.some((e) => e.nombre === nombre))
-      nombre = `${base} ${n++}`;
+      nombre = `${base} ${++n}`;
     const color = colorAleatorio();
     items.push(this.opts.nuevoItem ? this.opts.nuevoItem(nombre, color) : { nombre, color });
     await this.guardar();
     this.seleccionado = items.length - 1;
+    this.editarAlAgregar = this.seleccionado;
     this.render();
   }
   eliminarSeleccion() {
@@ -1128,10 +1263,23 @@ var _GestorEtiquetasModal = class _GestorEtiquetasModal extends import_obsidian3
     const item = items[idx];
     if (!item || !this.puedeEliminar(idx))
       return;
-    new ConfirmarModal(this.app, `\xBFEliminar "${item.nombre}"?`, async () => {
+    const nombreItem = item.nombre;
+    const mensaje = `\xBFEliminar "${nombreItem}"?`;
+    new ConfirmarModal(this.app, mensaje, this.opts.avisoEliminar, async () => {
+      var _a, _b, _c, _d;
       items.splice(idx, 1);
       this.seleccionado = null;
       await this.guardar();
+      try {
+        if (this.opts.porEpica) {
+          if (this.epicaActual)
+            await ((_b = (_a = this.opts.porEpica).eliminar) == null ? void 0 : _b.call(_a, this.epicaActual, nombreItem));
+        } else {
+          await ((_d = (_c = this.opts).alEliminar) == null ? void 0 : _d.call(_c, nombreItem));
+        }
+      } catch (e) {
+        console.error(e);
+      }
       this.render();
     }).open();
   }
@@ -1147,6 +1295,7 @@ var _GestorEtiquetasModal = class _GestorEtiquetasModal extends import_obsidian3
     input.select();
     let terminado = false;
     const confirmar = async () => {
+      var _a, _b, _c, _d;
       if (terminado)
         return;
       const valor = input.value.trim();
@@ -1168,6 +1317,17 @@ var _GestorEtiquetasModal = class _GestorEtiquetasModal extends import_obsidian3
       terminado = true;
       items[indice].nombre = valor;
       await this.guardar();
+      try {
+        if (this.opts.porEpica) {
+          if (this.epicaActual) {
+            await ((_b = (_a = this.opts.porEpica).renombrar) == null ? void 0 : _b.call(_a, this.epicaActual, original, valor));
+          }
+        } else {
+          await ((_d = (_c = this.opts).alRenombrar) == null ? void 0 : _d.call(_c, original, valor));
+        }
+      } catch (e) {
+        console.error(e);
+      }
       this.render();
     };
     input.addEventListener("keydown", (e) => {
@@ -1193,14 +1353,17 @@ _GestorEtiquetasModal.LARGO_MIN = 1;
 _GestorEtiquetasModal.LARGO_MAX = 50;
 var GestorEtiquetasModal = _GestorEtiquetasModal;
 var ConfirmarModal = class extends import_obsidian3.Modal {
-  constructor(app, mensaje, onConfirmar) {
+  constructor(app, mensaje, aviso, onConfirmar) {
     super(app);
     this.mensaje = mensaje;
+    this.aviso = aviso;
     this.onConfirmar = onConfirmar;
   }
   onOpen() {
     this.titleEl.setText("Confirmar");
     this.contentEl.createEl("p", { text: this.mensaje });
+    if (this.aviso)
+      this.contentEl.createEl("p", { cls: "gf-campo-aviso", text: this.aviso });
     const row = this.contentEl.createDiv({ cls: "gf-botones" });
     const cancelar = row.createEl("button", { text: "Cancelar" });
     cancelar.addEventListener("click", () => this.close());
@@ -1359,6 +1522,9 @@ var GestorSettingTab = class extends import_obsidian4.PluginSettingTab {
       () => new GestorEtiquetasModal(this.plugin, {
         titulo: "Configurar equipos",
         conVisible: true,
+        avisoEliminar: "Se quitar\xE1 de todos los sprints donde est\xE9 asignada. No se elimina ninguna carpeta.",
+        alRenombrar: (ant, nue) => renombrarEtiquetaSprint(this.plugin.app, this.plugin.settings.carpetaAdmin, ant, nue),
+        alEliminar: (nombre) => eliminarEtiquetaSprint(this.plugin.app, this.plugin.settings.carpetaAdmin, nombre),
         secciones: [
           {
             id: "sprint",
@@ -1520,7 +1686,7 @@ function crearIconoTab(parent, id) {
     return;
   svg.setAttribute("width", "18");
   svg.setAttribute("height", "18");
-  parent.appendChild(document.importNode(svg, true));
+  parent.appendChild(activeDocument.importNode(svg, true));
 }
 var ICONO_PLUGIN_SVG = `<g transform="scale(0.19230769)" fill="currentColor"><g transform="matrix(1.472877,0,0,1.51955,-204.704019,-73.839992)"><path d="M311.84,336.445C310.777,341.514 306.122,345.335 300.548,345.335C294.19,345.335 289.029,340.364 289.029,334.241L289.029,259.925L226.583,304.643C221.543,308.252 214.409,307.09 210.661,302.05C206.913,297.01 207.963,289.988 213.003,286.379L289.029,231.936L289.029,183.801L213.907,183.801C207.667,183.801 202.602,178.736 202.602,172.497C202.602,166.257 207.667,161.192 213.907,161.192L268.038,161.192L221.755,128.048C216.715,124.439 215.666,117.416 219.413,112.377C223.161,107.337 230.296,106.175 235.336,109.784L307.123,161.192L323.893,161.192L395.68,109.784C400.72,106.175 407.854,107.337 411.602,112.377C415.35,117.416 414.301,124.439 409.261,128.048L362.977,161.192L417.109,161.192C423.348,161.192 428.414,166.257 428.414,172.497C428.414,178.736 423.348,183.801 417.109,183.801L341.987,183.801L341.987,231.936L418.013,286.379C423.053,289.988 424.102,297.01 420.354,302.05C416.607,307.09 409.472,308.252 404.432,304.643L341.987,259.925L341.987,334.241C341.987,340.364 336.825,345.335 330.467,345.335C324.893,345.335 320.239,341.514 319.176,336.445L319.176,244.305L319.162,244.305C318.997,242.49 317.423,241.064 315.508,241.064C313.592,241.064 312.018,242.49 311.854,244.305L311.84,244.305L311.84,336.445ZM315.508,151.615C303.155,151.615 293.125,141.773 293.125,129.65C293.125,117.527 303.155,107.685 315.508,107.685C327.861,107.685 337.89,117.527 337.89,129.65C337.89,141.773 327.861,151.615 315.508,151.615Z"/></g><g transform="matrix(1.472877,0,0,1.491196,-136.582285,-55.779129)"><path d="M269.257,50.911C358.057,50.911 430.194,122.963 430.194,211.762C430.194,300.562 358.057,372.614 269.257,372.614C180.457,372.614 108.32,300.562 108.32,211.762C108.32,122.963 180.457,50.911 269.257,50.911ZM269.257,64.695C188.112,64.695 122.276,130.617 122.276,211.762C122.276,292.907 188.112,358.829 269.257,358.829C350.402,358.829 416.238,292.907 416.238,211.762C416.238,130.617 350.402,64.695 269.257,64.695Z"/></g></g>`;
 
@@ -1553,15 +1719,15 @@ function crearSelect(opts) {
       return;
     abierto = false;
     panel.remove();
-    document.removeEventListener("click", onDocClick, true);
+    activeDocument.removeEventListener("click", onDocClick, true);
     window.removeEventListener("scroll", onScroll, true);
     window.removeEventListener("resize", cerrar);
-    document.removeEventListener("keydown", onKey, true);
+    activeDocument.removeEventListener("keydown", onKey, true);
   }
   function abrir() {
     if (abierto || disabled)
       return;
-    document.body.appendChild(panel);
+    activeDocument.body.appendChild(panel);
     const r = btn.getBoundingClientRect();
     panel.setCssStyles({
       top: `${r.bottom + 4}px`,
@@ -1571,10 +1737,10 @@ function crearSelect(opts) {
     });
     abierto = true;
     window.setTimeout(() => {
-      document.addEventListener("click", onDocClick, true);
+      activeDocument.addEventListener("click", onDocClick, true);
       window.addEventListener("scroll", onScroll, true);
       window.addEventListener("resize", cerrar);
-      document.addEventListener("keydown", onKey, true);
+      activeDocument.addEventListener("keydown", onKey, true);
     }, 0);
   }
   const setAbierto = (v) => {
@@ -1692,10 +1858,11 @@ var REGISTRO = [
   // Épicas — administración
   { id: "crear-epica", icono: "folder-plus", texto: "Crear \xE9pica", accion: (p) => p.abrirModal("funcionalidad") },
   { id: "crear-funcionalidad", icono: "puzzle", texto: "Crear historia", accion: (p) => p.abrirModal("crearfn") },
+  { id: "asignar-sprint", icono: "calendar-days", texto: "Asignar sprint", accion: (p) => p.abrirModal("sprint") },
   { id: "etiquetas-epica", icono: "tags", texto: "Configurar etiquetas", accion: (p) => p.abrirModal("etiquetasEpica") },
   { id: "asignar-etiquetas", icono: "tag", texto: "Etiquetar historias", accion: (p) => p.abrirModal("asignarEtiquetas") },
+  { id: "editar-nombre", icono: "pencil", texto: "Editar nombre", accion: (p) => p.abrirModal("editarNombre") },
   { id: "archivar-epica", icono: "archive", texto: "Archivar \xE9picas", accion: (p) => p.abrirModal("mover") },
-  { id: "asignar-sprint", icono: "calendar-days", texto: "Asignar sprint", accion: (p) => p.abrirModal("sprint") },
   // Épicas — tableros
   { id: "roadmap", icono: "map", texto: "Roadmap", accion: (p) => void p.abrirRoadmap() },
   { id: "gestor-funcionalidades", icono: "kanban-square", texto: "Gesti\xF3n de historias", accion: (p) => void p.abrirGestorFuncionalidades() },
@@ -1711,7 +1878,7 @@ var REGISTRO = [
 ];
 var POR_ID = new Map(REGISTRO.map((a) => [a.id, a]));
 var SECCIONES_PANEL = [
-  { id: "epicas-admin", titulo: "Administraci\xF3n", acciones: ["crear-epica", "crear-funcionalidad", "etiquetas-epica", "asignar-etiquetas", "archivar-epica"] },
+  { id: "epicas-admin", titulo: "Administraci\xF3n", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas", "editar-nombre", "archivar-epica"] },
   { id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
   { id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia"] },
   { id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
@@ -2243,8 +2410,9 @@ var CrearFuncionalidadModal = class extends GestorModal {
         }
         if (this.crearNuevo) {
           new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: \xE9pica "${valor}" creada.`);
-          this.contentEl.empty();
-          this.onOpen();
+          nombre.input.value = "";
+          this.limpiarError(nombre);
+          nombre.input.focus();
         } else {
           this.close();
           await this.abrirNota(file);
@@ -2259,6 +2427,50 @@ var CrearFuncionalidadModal = class extends GestorModal {
       }
     });
     nombre.input.focus();
+  }
+};
+var EditarNombreModal = class extends GestorModal {
+  onOpen() {
+    this.titleEl.setText("Editar nombre");
+    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+    const epica = this.campoEpica(funcs);
+    const fn = this.campoFuncionalidad(epica);
+    const nombre = this.campoTexto("Nuevo nombre", "Escribe el nuevo nombre");
+    const objetivo = () => {
+      var _a, _b;
+      return (_b = (_a = fn.getFn()) != null ? _a : epica.getFunc()) != null ? _b : null;
+    };
+    const sincronizar = () => {
+      const o = objetivo();
+      nombre.input.value = o ? o.nombre : "";
+    };
+    epica.select.addEventListener("change", sincronizar);
+    fn.select.addEventListener("change", sincronizar);
+    sincronizar();
+    this.botones(async () => {
+      this.limpiarError(epica);
+      this.limpiarError(nombre);
+      const o = objetivo();
+      const valor = nombre.input.value.trim();
+      if (!o) {
+        this.mostrarError(epica, MSG_OBLIGATORIO);
+        return;
+      }
+      if (!valor) {
+        this.mostrarError(nombre, "El nombre es obligatorio.");
+        return;
+      }
+      try {
+        await renombrarFuncionalidad(this.app, o, valor);
+        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: nombre actualizado.");
+        this.close();
+      } catch (e) {
+        console.error(e);
+        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: no se pudo renombrar.");
+      }
+    }, "Guardar");
+    if (funcs.length === 0)
+      this.sinEpicas(epica);
   }
 };
 var CrearTareaModal = class extends GestorModal {
@@ -2610,6 +2822,7 @@ var AsignarSprintModal = class extends GestorModal {
 };
 function renderListaSprints(plugin, cont, edicion, scrollSprint) {
   var _a, _b;
+  const scrollPrevio = cont.scrollTop;
   cont.empty();
   const disponibles = plugin.settings.etiquetas.filter((e) => e.visible !== false);
   const colorEtiqueta = (nombre) => {
@@ -2649,8 +2862,10 @@ function renderListaSprints(plugin, cont, edicion, scrollSprint) {
       renderListaSprints(plugin, cont, edicion, scrollSprint);
     });
   }
-  if (scrollSprint) {
+  if (scrollPrevio === 0 && scrollSprint) {
     (_b = cont.querySelector(`[data-sprint="${scrollSprint}"]`)) == null ? void 0 : _b.scrollIntoView({ block: "center" });
+  } else {
+    cont.scrollTop = scrollPrevio;
   }
 }
 var ConfigurarSprintModal = class extends import_obsidian8.Modal {
@@ -2792,24 +3007,24 @@ function crearSelectorEtiquetas(opts) {
       return;
     abierto = false;
     panel.remove();
-    document.removeEventListener("click", onDocClick, true);
+    activeDocument.removeEventListener("click", onDocClick, true);
     window.removeEventListener("scroll", onScroll, true);
     window.removeEventListener("resize", cerrar);
-    document.removeEventListener("keydown", onKey, true);
+    activeDocument.removeEventListener("keydown", onKey, true);
   }
   function abrir() {
     if (abierto)
       return;
     renderPanel();
-    document.body.appendChild(panel);
+    activeDocument.body.appendChild(panel);
     const r = btn.getBoundingClientRect();
     panel.setCssStyles({ top: `${r.bottom + 4}px`, left: `${r.left}px`, display: "block" });
     abierto = true;
     window.setTimeout(() => {
-      document.addEventListener("click", onDocClick, true);
+      activeDocument.addEventListener("click", onDocClick, true);
       window.addEventListener("scroll", onScroll, true);
       window.addEventListener("resize", cerrar);
-      document.addEventListener("keydown", onKey, true);
+      activeDocument.addEventListener("keydown", onKey, true);
     }, 0);
   }
   btn.addEventListener("click", (e) => {
@@ -3301,8 +3516,9 @@ var CrearFuncionalidadNuevaModal = class extends GestorModal {
         }
         if (this.crearNuevo) {
           new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: historia "${valor}" creada.`);
-          this.contentEl.empty();
-          this.onOpen();
+          nombre.input.value = "";
+          this.limpiarError(nombre);
+          nombre.input.focus();
         } else {
           this.close();
           await this.abrirNota(file);
@@ -4490,6 +4706,11 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
       callback: () => this.abrirModal("sprint")
     });
     this.addCommand({
+      id: "editar-nombre",
+      name: "Editar nombre de \xE9pica o historia",
+      callback: () => this.abrirModal("editarNombre")
+    });
+    this.addCommand({
       id: "mover-epica",
       name: "Archivar \xE9picas",
       callback: () => this.abrirModal("mover")
@@ -4564,8 +4785,11 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
       case "colaboradores":
         new GestorEtiquetasModal(this, {
           titulo: "Configurar colaboradores",
-          nuevoNombre: "Sin nombre",
+          nuevoNombre: "Colaborador",
           conVisible: true,
+          avisoEliminar: "Se quitar\xE1 de las incidencias donde est\xE9 asignado. No se elimina ninguna carpeta.",
+          alRenombrar: (ant, nue) => renombrarColaborador(this.app, this.settings.carpetaAdmin, this.settings.incidencias, ant, nue),
+          alEliminar: (nombre) => eliminarColaborador(this.app, this.settings.carpetaAdmin, this.settings.incidencias, nombre),
           secciones: [
             {
               id: "colab",
@@ -4580,10 +4804,13 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
           titulo: "Configurar etiquetas",
           nuevoNombre: "Etiqueta",
           conVisible: true,
+          avisoEliminar: "Se quitar\xE1 de las historias que la tengan asignada.",
           porEpica: {
             epicas: listFuncionalidades(this.app, this.settings.carpetaAdmin),
             cargar: (ep) => leerEtiquetasEpica(this.app, ep),
-            guardar: (ep, lista) => guardarEtiquetasEpica(this.app, ep, lista)
+            guardar: (ep, lista) => guardarEtiquetasEpica(this.app, ep, lista),
+            renombrar: (ep, ant, nue) => renombrarEtiquetaHistoria(this.app, ep, ant, nue),
+            eliminar: (ep, nombre) => eliminarEtiquetaHistoria(this.app, ep, nombre)
           }
         }).open();
         break;
@@ -4595,6 +4822,8 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
           titulo: "Configurar incidencias",
           nuevoNombre: "Incidencia",
           conVisible: true,
+          avisoEliminar: "Se quitar\xE1 el tipo de la configuraci\xF3n. Las incidencias y sus carpetas se conservan.",
+          alRenombrar: (ant, nue) => renombrarTipoIncidencia(this.app, this.settings.carpetaAdmin, ant, nue),
           secciones: [
             {
               id: "incidencias",
@@ -4606,6 +4835,9 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
         break;
       case "incidencia":
         new CrearIncidenciaModal(this).open();
+        break;
+      case "editarNombre":
+        new EditarNombreModal(this).open();
         break;
     }
   }

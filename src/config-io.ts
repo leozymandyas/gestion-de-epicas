@@ -19,7 +19,7 @@ interface Categoria {
 	clave: string;
 	etiqueta: string;
 	exportar: (s: GestorSettings) => unknown;
-	leerArchivo: (valor: unknown) => unknown | null;
+	leerArchivo: (valor: unknown) => unknown;
 	aplicar: (s: GestorSettings, valor: unknown) => void;
 }
 
@@ -120,10 +120,10 @@ export const CATEGORIAS: Categoria[] = [
 function descargarJson(nombre: string, contenido: string): void {
 	const blob = new Blob([contenido], { type: "application/json" });
 	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
+	const a = activeDocument.createElement("a");
 	a.href = url;
 	a.download = nombre;
-	document.body.appendChild(a);
+	activeDocument.body.appendChild(a);
 	a.click();
 	a.remove();
 	window.setTimeout(() => URL.revokeObjectURL(url), 1000);

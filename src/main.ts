@@ -14,9 +14,16 @@ import {
 } from "./settings";
 import {
 	carpetasGestionListas,
+	eliminarColaborador,
+	eliminarEtiquetaHistoria,
+	eliminarEtiquetaSprint,
 	guardarEtiquetasEpica,
 	leerEtiquetasEpica,
 	listFuncionalidades,
+	renombrarColaborador,
+	renombrarEtiquetaHistoria,
+	renombrarEtiquetaSprint,
+	renombrarTipoIncidencia,
 } from "./files";
 import { registerDashboard } from "./dashboard";
 import { AccionesView, VIEW_TYPE_ACCIONES } from "./acciones";
@@ -36,6 +43,7 @@ import {
 	CrearIncidenciaModal,
 	CrearPendienteModal,
 	CrearTareaModal,
+	EditarNombreModal,
 	MoverEpicaModal,
 } from "./modals";
 import { GestorEtiquetasModal } from "./etiquetas-modal";
@@ -52,7 +60,8 @@ export type TipoModal =
 	| "etiquetasEpica"
 	| "asignarEtiquetas"
 	| "configIncidencias"
-	| "incidencia";
+	| "incidencia"
+	| "editarNombre";
 
 export default class GestorFuncionesPlugin extends Plugin {
 	settings: GestorSettings = DEFAULT_SETTINGS;
@@ -138,6 +147,11 @@ export default class GestorFuncionesPlugin extends Plugin {
 			callback: () => this.abrirModal("sprint"),
 		});
 		this.addCommand({
+			id: "editar-nombre",
+			name: "Editar nombre de épica o historia",
+			callback: () => this.abrirModal("editarNombre"),
+		});
+		this.addCommand({
 			id: "mover-epica",
 			name: "Archivar épicas",
 			callback: () => this.abrirModal("mover"),
@@ -212,8 +226,13 @@ export default class GestorFuncionesPlugin extends Plugin {
 			case "colaboradores":
 				new GestorEtiquetasModal(this, {
 					titulo: "Configurar colaboradores",
-					nuevoNombre: "Sin nombre",
+					nuevoNombre: "Colaborador",
 					conVisible: true,
+					avisoEliminar: "Se quitará de las incidencias donde esté asignado. No se elimina ninguna carpeta.",
+					alRenombrar: (ant, nue) =>
+						renombrarColaborador(this.app, this.settings.carpetaAdmin, this.settings.incidencias, ant, nue),
+					alEliminar: (nombre) =>
+						eliminarColaborador(this.app, this.settings.carpetaAdmin, this.settings.incidencias, nombre),
 					secciones: [
 						{
 							id: "colab",
@@ -228,10 +247,13 @@ export default class GestorFuncionesPlugin extends Plugin {
 					titulo: "Configurar etiquetas",
 					nuevoNombre: "Etiqueta",
 					conVisible: true,
+					avisoEliminar: "Se quitará de las historias que la tengan asignada.",
 					porEpica: {
 						epicas: listFuncionalidades(this.app, this.settings.carpetaAdmin),
 						cargar: (ep) => leerEtiquetasEpica(this.app, ep),
 						guardar: (ep, lista) => guardarEtiquetasEpica(this.app, ep, lista),
+						renombrar: (ep, ant, nue) => renombrarEtiquetaHistoria(this.app, ep, ant, nue),
+						eliminar: (ep, nombre) => eliminarEtiquetaHistoria(this.app, ep, nombre),
 					},
 				}).open();
 				break;
@@ -243,6 +265,9 @@ export default class GestorFuncionesPlugin extends Plugin {
 					titulo: "Configurar incidencias",
 					nuevoNombre: "Incidencia",
 					conVisible: true,
+					avisoEliminar: "Se quitará el tipo de la configuración. Las incidencias y sus carpetas se conservan.",
+					alRenombrar: (ant, nue) =>
+						renombrarTipoIncidencia(this.app, this.settings.carpetaAdmin, ant, nue),
 					secciones: [
 						{
 							id: "incidencias",
@@ -254,6 +279,9 @@ export default class GestorFuncionesPlugin extends Plugin {
 				break;
 			case "incidencia":
 				new CrearIncidenciaModal(this).open();
+				break;
+			case "editarNombre":
+				new EditarNombreModal(this).open();
 				break;
 		}
 	}
@@ -328,7 +356,7 @@ export default class GestorFuncionesPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const guardado = await this.loadData();
+		const guardado: unknown = await this.loadData();
 		// Primera ejecución (sin data.json): se siembra el colaborador por defecto.
 		const primeraVez = guardado === null || guardado === undefined;
 		const data = ((guardado ?? {}) as Partial<GestorSettings> & {
