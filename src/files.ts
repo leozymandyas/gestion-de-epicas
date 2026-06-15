@@ -127,6 +127,30 @@ export async function crearCarpetasGestion(app: App): Promise<void> {
 	await ensureFolder(app, CARPETA_INACTIVAS);
 }
 
+/** Migra el campo de frontmatter heredado `funcionalidad` a `historia` en las
+ * incidencias (tareas, pendientes y tipos). Idempotente. */
+async function migrarCampoHistoria(app: App): Promise<void> {
+	const bajoGestion = (p: string) =>
+		p.startsWith(`${CARPETA_ACTIVAS}/`) || p.startsWith(`${CARPETA_INACTIVAS}/`);
+	for (const file of app.vault.getMarkdownFiles()) {
+		if (!bajoGestion(file.path)) continue;
+		const fm = app.metadataCache.getFileCache(file)?.frontmatter as
+			| Record<string, unknown>
+			| undefined;
+		if (!fm || !("funcionalidad" in fm) || "historia" in fm) continue;
+		try {
+			await app.fileManager.processFrontMatter(file, (f: Record<string, unknown>) => {
+				if ("funcionalidad" in f && !("historia" in f)) {
+					f.historia = f.funcionalidad;
+					delete f.funcionalidad;
+				}
+			});
+		} catch (e) {
+			console.error(e);
+		}
+	}
+}
+
 /** Migra la carpeta de historias heredada ("funcionalidades") a "historias" en
  * cada épica (activas y archivadas). Renombra con `renameFile` para conservar
  * los enlaces internos. Es idempotente: no hace nada si ya está migrada. */
@@ -153,6 +177,8 @@ export async function migrarCarpetasHistorias(app: App): Promise<void> {
 			}
 		}
 	}
+
+	await migrarCampoHistoria(app);
 
 	// Corrige el `tipo` heredado de las historias ("funcionalidad" → "historia").
 	// Solo afecta a las notas de historia (dentro de la carpeta de historias), no
@@ -938,7 +964,8 @@ export async function moverIncidencia(
 	}
 	await app.fileManager.processFrontMatter(incFile, (fm: Record<string, unknown>) => {
 		fm.tipo = nuevoSlug;
-		fm.funcionalidad = `[[${destino.slug}]]`;
+		fm.historia = `[[${destino.slug}]]`;
+		delete fm.funcionalidad;
 		fm.nombre = nombreFinal;
 	});
 	await actualizarH1(app, incFile, nombreFinal);

@@ -44,7 +44,7 @@ function cuerpoSecciones(nombre: string): string {
 export function tarea(nombre: string, funcSlug: string, fecha: string): string {
 	return `---
 tipo: tarea
-funcionalidad: "[[${funcSlug}]]"
+historia: "[[${funcSlug}]]"
 nombre: "${escapeYaml(nombre)}"
 estado: por-hacer
 fecha-creacion: ${fecha}
@@ -69,7 +69,7 @@ export function incidencia(
 ): string {
 	return `---
 tipo: ${tipoSlug}
-funcionalidad: "[[${funcSlug}]]"
+historia: "[[${funcSlug}]]"
 nombre: "${escapeYaml(nombre)}"
 estado: por-hacer
 fecha-creacion: ${fecha}
@@ -88,7 +88,7 @@ fecha-creacion: ${fecha}
 export function pendiente(nombre: string, funcSlug: string, fecha: string): string {
 	return `---
 tipo: pendiente
-funcionalidad: "[[${funcSlug}]]"
+historia: "[[${funcSlug}]]"
 nombre: "${escapeYaml(nombre)}"
 estado: por-hacer
 fecha: ${fecha}

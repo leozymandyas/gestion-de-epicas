@@ -84,7 +84,7 @@ function cuerpoSecciones(nombre) {
 function tarea(nombre, funcSlug, fecha) {
   return `---
 tipo: tarea
-funcionalidad: "[[${funcSlug}]]"
+historia: "[[${funcSlug}]]"
 nombre: "${escapeYaml(nombre)}"
 estado: por-hacer
 fecha-creacion: ${fecha}
@@ -102,7 +102,7 @@ fecha-creacion: ${fecha}
 function incidencia(nombre, funcSlug, fecha, tipoSlug) {
   return `---
 tipo: ${tipoSlug}
-funcionalidad: "[[${funcSlug}]]"
+historia: "[[${funcSlug}]]"
 nombre: "${escapeYaml(nombre)}"
 estado: por-hacer
 fecha-creacion: ${fecha}
@@ -120,7 +120,7 @@ fecha-creacion: ${fecha}
 function pendiente(nombre, funcSlug, fecha) {
   return `---
 tipo: pendiente
-funcionalidad: "[[${funcSlug}]]"
+historia: "[[${funcSlug}]]"
 nombre: "${escapeYaml(nombre)}"
 estado: por-hacer
 fecha: ${fecha}
@@ -225,6 +225,27 @@ async function crearCarpetasGestion(app) {
   await ensureFolder(app, CARPETA_ACTIVAS);
   await ensureFolder(app, CARPETA_INACTIVAS);
 }
+async function migrarCampoHistoria(app) {
+  var _a;
+  const bajoGestion = (p) => p.startsWith(`${CARPETA_ACTIVAS}/`) || p.startsWith(`${CARPETA_INACTIVAS}/`);
+  for (const file of app.vault.getMarkdownFiles()) {
+    if (!bajoGestion(file.path))
+      continue;
+    const fm = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+    if (!fm || !("funcionalidad" in fm) || "historia" in fm)
+      continue;
+    try {
+      await app.fileManager.processFrontMatter(file, (f) => {
+        if ("funcionalidad" in f && !("historia" in f)) {
+          f.historia = f.funcionalidad;
+          delete f.funcionalidad;
+        }
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+}
 async function migrarCarpetasHistorias(app) {
   var _a, _b;
   const epicas = [
@@ -249,6 +270,7 @@ async function migrarCarpetasHistorias(app) {
       }
     }
   }
+  await migrarCampoHistoria(app);
   const epicas2 = [
     ...listFuncionalidades(app, CARPETA_ACTIVAS),
     ...listFuncionalidades(app, CARPETA_INACTIVAS)
@@ -828,7 +850,8 @@ async function moverIncidencia(app, incFile, origen, destino, nuevoTipoNombre, n
   }
   await app.fileManager.processFrontMatter(incFile, (fm) => {
     fm.tipo = nuevoSlug;
-    fm.funcionalidad = `[[${destino.slug}]]`;
+    fm.historia = `[[${destino.slug}]]`;
+    delete fm.funcionalidad;
     fm.nombre = nombreFinal;
   });
   await actualizarH1(app, incFile, nombreFinal);
