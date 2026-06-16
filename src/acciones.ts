@@ -41,6 +41,7 @@ const REGISTRO: Accion[] = [
 	{ id: "crear-documento", icono: "file-plus", texto: "Crear documento", accion: (p) => p.abrirModal("documento") },
 	{ id: "editar-documento", icono: "replace", texto: "Editar documento", accion: (p) => p.abrirModal("editarDocumento") },
 	{ id: "documentos", icono: "file-text", texto: "Documentos", accion: (p) => void p.abrirDocumentos() },
+	{ id: "organizar-documentos", icono: "layout-grid", texto: "Organizar documentos", accion: (p) => void p.abrirOrganizarDocumentos() },
 	// Colaboradores
 	{ id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
 	{ id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
@@ -58,7 +59,7 @@ const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }>
 	{ id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
 	{ id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia", "editar-incidencia"] },
 	{ id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador", "incidencias-por-colaborador"] },
-	{ id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "editar-documento", "documentos"] },
+	{ id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "editar-documento", "documentos", "organizar-documentos"] },
 ];
 
 /**

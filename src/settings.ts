@@ -37,6 +37,30 @@ export interface Carril {
 	visible: boolean;
 }
 
+/** Carril (fila horizontal) del tablero "Organizar documentos". */
+export interface DocCarril {
+	/** Id estable; se conserva al renombrar. */
+	id: string;
+	nombre: string;
+}
+
+/**
+ * Organización de documentos de una épica en el tablero "Organizar documentos".
+ * El carril "Todos los documentos" (id "todos") es implícito y recoge cualquier
+ * documento que no esté asignado a un carril personalizado.
+ */
+export interface OrganizacionDocsEpica {
+	/** Carriles personalizados (además del implícito "Todos los documentos"). */
+	carriles: DocCarril[];
+	/** Ruta del documento → id del carril donde está su tarjeta. */
+	asignacion: Record<string, string>;
+	/** Orden manual de las tarjetas (rutas en orden). */
+	orden: string[];
+}
+
+/** Id del carril implícito que recoge los documentos sin asignar. */
+export const CARRIL_DOCS_TODOS = "todos";
+
 export interface GestorSettings {
 	carpetaAdmin: string;
 	/** Etiquetas de sprint (se usan al asignar sprints y en el roadmap). */
@@ -59,6 +83,8 @@ export interface GestorSettings {
 	ordenIncidenciasColab: string[];
 	/** Orden manual de las tarjetas (épica/historia) en el tablero de documentos. */
 	ordenGruposDocumentos: string[];
+	/** Organización por carriles del tablero "Organizar documentos" (clave = slug de la épica). */
+	organizacionDocs: Record<string, OrganizacionDocsEpica>;
 	/** Sprint en curso elegido en el panel; sugiere filtros en roadmap/incidencias. */
 	sprintActual: { anio: number; sprint: number };
 	kanban: KanbanState;
@@ -115,6 +141,7 @@ export const DEFAULT_SETTINGS: GestorSettings = {
 	ordenFunc: [],
 	ordenIncidenciasColab: [],
 	ordenGruposDocumentos: [],
+	organizacionDocs: {},
 	sprintActual: { anio: new Date().getFullYear(), sprint: 1 },
 	kanban: {
 		tareas: {},

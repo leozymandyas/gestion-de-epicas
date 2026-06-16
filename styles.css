@@ -416,6 +416,95 @@
 	margin-top: 2px;
 }
 
+/* ----- Organizar documentos: carriles horizontales (filas apiladas) ----- */
+.gf-orgdocs-board {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-height: 100%;
+}
+
+.gf-orgdocs-carril {
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	display: flex;
+	flex-direction: column;
+}
+
+.gf-orgdocs-carril.gf-drop {
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: -2px;
+}
+
+.gf-orgdocs-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* Botones de renombrar/eliminar del carril, alineados a la derecha. */
+.gf-orgdocs-carril-acciones {
+	display: flex;
+	gap: 2px;
+	margin-left: auto;
+}
+
+.gf-orgdocs-icono-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+	color: var(--text-muted);
+	background: transparent;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.gf-orgdocs-icono-btn:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* Cuerpo del carril: los documentos se apilan en filas, uno sobre otro. */
+.gf-orgdocs-cuerpo {
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-height: 48px;
+}
+
+.gf-orgdocs-card {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+}
+
+.gf-orgdocs-card-nombre {
+	flex: 1;
+	font-size: var(--font-ui-small);
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Al arrastrar sobre una fila, marca la inserción encima de ella. */
+.gf-orgdocs-card.gf-drop-card {
+	border-top: 2px solid var(--interactive-accent);
+}
+
+.gf-orgdocs-nombre-input {
+	width: 100%;
+	margin-bottom: 12px;
+}
+
 .gf-kanban-expand {
 	cursor: pointer;
 	color: var(--text-muted);

@@ -9,6 +9,7 @@ import {
 	Etiqueta,
 	GestorSettings,
 	GestorSettingTab,
+	OrganizacionDocsEpica,
 	INCIDENCIAS_DEFECTO,
 	NUM_SPRINTS_DEFECTO,
 	normalizarEstado,
@@ -40,6 +41,7 @@ import {
 	VIEW_TYPE_COLABORADORES,
 	VIEW_TYPE_DOCUMENTOS,
 } from "./colaboradores";
+import { OrganizarDocumentosView, VIEW_TYPE_ORGANIZAR_DOCS } from "./organizar-documentos";
 import { ICONO_PLUGIN, ICONO_PLUGIN_SVG } from "./icono";
 import {
 	AgregarLinkModal,
@@ -79,6 +81,36 @@ export type TipoModal =
 	| "documento"
 	| "editarDocumento";
 
+/** Sanea el mapa de organización por carriles de "Organizar documentos". */
+function sanearOrganizacionDocs(valor: unknown): Record<string, OrganizacionDocsEpica> {
+	const out: Record<string, OrganizacionDocsEpica> = {};
+	if (!valor || typeof valor !== "object") return out;
+	for (const [slug, crudo] of Object.entries(valor as Record<string, unknown>)) {
+		if (!crudo || typeof crudo !== "object") continue;
+		const o = crudo as Record<string, unknown>;
+		const carriles = Array.isArray(o.carriles)
+			? (o.carriles as unknown[])
+					.map((c) => {
+						if (!c || typeof c !== "object") return null;
+						const r = c as Record<string, unknown>;
+						const id = String(r.id ?? "").trim();
+						const nombre = String(r.nombre ?? "").trim();
+						return id && nombre ? { id, nombre } : null;
+					})
+					.filter((c): c is { id: string; nombre: string } => c !== null)
+			: [];
+		const asignacion: Record<string, string> = {};
+		if (o.asignacion && typeof o.asignacion === "object") {
+			for (const [path, lane] of Object.entries(o.asignacion as Record<string, unknown>)) {
+				asignacion[path] = String(lane);
+			}
+		}
+		const orden = Array.isArray(o.orden) ? (o.orden as unknown[]).map(String) : [];
+		out[slug] = { carriles, asignacion, orden };
+	}
+	return out;
+}
+
 export default class GestorFuncionesPlugin extends Plugin {
 	settings: GestorSettings = DEFAULT_SETTINGS;
 	/** Última config escrita a la bóveda (para no reescribir si no cambió). */
@@ -113,6 +145,10 @@ export default class GestorFuncionesPlugin extends Plugin {
 		this.registerView(
 			VIEW_TYPE_DOCUMENTOS,
 			(leaf) => new TareasColaboradorView(leaf, this, CONFIG_DOCUMENTOS)
+		);
+		this.registerView(
+			VIEW_TYPE_ORGANIZAR_DOCS,
+			(leaf) => new OrganizarDocumentosView(leaf, this)
 		);
 
 		// "Agregar link" en el menú contextual del editor, en cualquier nota.
@@ -208,6 +244,11 @@ export default class GestorFuncionesPlugin extends Plugin {
 			id: "abrir-documentos",
 			name: "Abrir documentos",
 			callback: () => void this.abrirDocumentos(),
+		});
+		this.addCommand({
+			id: "organizar-documentos",
+			name: "Organizar documentos",
+			callback: () => void this.abrirOrganizarDocumentos(),
 		});
 		this.addCommand({
 			id: "mover-epica",
@@ -440,6 +481,10 @@ export default class GestorFuncionesPlugin extends Plugin {
 		await this.abrirVistaEnPestana(VIEW_TYPE_DOCUMENTOS);
 	}
 
+	async abrirOrganizarDocumentos(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_ORGANIZAR_DOCS);
+	}
+
 	/**
 	 * Abre la vista como pestaña del área principal. Si quedó anclada en un
 	 * panel lateral (layouts guardados de versiones anteriores), la desancla
@@ -547,6 +592,7 @@ export default class GestorFuncionesPlugin extends Plugin {
 			ordenFunc: (data.ordenFunc ?? []).map(String),
 			ordenIncidenciasColab: (data.ordenIncidenciasColab ?? []).map(String),
 			ordenGruposDocumentos: (data.ordenGruposDocumentos ?? []).map(String),
+			organizacionDocs: sanearOrganizacionDocs(data.organizacionDocs),
 			sprintActual: {
 				anio: anioValido(data.sprintActual?.anio),
 				sprint: enRango(data.sprintActual?.sprint, 1),
