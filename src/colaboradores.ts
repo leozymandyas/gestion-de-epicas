@@ -77,6 +77,8 @@ export class TareasColaboradorView extends ItemView {
 	private cfg: VistaColabConfig;
 	private renderTimer: number | null = null;
 	private seleccionFiltro = new Set<string>();
+	/** Si ya se aplicó la selección por defecto del filtro de colaborador. */
+	private filtroColabInit = false;
 	private tiposFiltro = new Set<string>();
 	private desde = 1;
 	private hasta: number;
@@ -148,7 +150,22 @@ export class TareasColaboradorView extends ItemView {
 		} catch (e) {
 			console.error("gestion-de-epicas: error al recolectar", e);
 		}
+		this.aplicarFiltroColabPorDefecto();
 		this.render();
+	}
+
+	/** La primera vez (modo colaborador) deja marcados en el filtro solo los
+	 * colaboradores que tienen incidencias asignadas + "Sin asignar". Después
+	 * respeta lo que elija el usuario. */
+	private aplicarFiltroColabPorDefecto(): void {
+		if (this.cfg.agruparPor !== "colaborador" || this.filtroColabInit) return;
+		this.filtroColabInit = true;
+		for (const g of this.grupos) {
+			if (g.filtroClave && g.filtroClave !== SIN_ASIGNAR && g.items.length > 0) {
+				this.seleccionFiltro.add(g.filtroClave);
+			}
+		}
+		this.seleccionFiltro.add(SIN_ASIGNAR);
 	}
 
 	/** Renderiza protegido: ante cualquier error muestra el mensaje en vez de
@@ -476,13 +493,23 @@ export class TareasColaboradorView extends ItemView {
 								this.app,
 								"Marcar como hecha",
 								"¿Marcar esta incidencia como hecha? Su estado pasará a completado.",
+								"Marcar como hecha",
 								() => void this.marcarEstado(inc.file, "completado"),
 								() => {
 									chk.checked = false;
 								}
 							).open();
 						} else {
-							void this.marcarEstado(inc.file, "por-hacer");
+							new ConfirmacionModal(
+								this.app,
+								"Marcar como pendiente",
+								"¿Quitar el estado de completado de esta incidencia? Volverá a Por hacer.",
+								"Marcar como pendiente",
+								() => void this.marcarEstado(inc.file, "por-hacer"),
+								() => {
+									chk.checked = true;
+								}
+							).open();
 						}
 					});
 				}
@@ -520,12 +547,16 @@ export class TareasColaboradorView extends ItemView {
 	}
 }
 
-/** Modal de confirmación con advertencia (aceptar / cancelar). */
+/** Modal de confirmación con aceptar / cancelar. Si se cierra con Escape o la X,
+ * se considera cancelado (para revertir el checkbox). */
 class ConfirmacionModal extends Modal {
+	private resuelto = false;
+
 	constructor(
 		app: App,
 		private titulo: string,
 		private mensaje: string,
+		private textoOk: string,
 		private onOk: () => void,
 		private onCancel: () => void
 	) {
@@ -538,11 +569,13 @@ class ConfirmacionModal extends Modal {
 		const row = this.contentEl.createDiv({ cls: "gf-botones" });
 		const cancelar = row.createEl("button", { text: "Cancelar" });
 		cancelar.addEventListener("click", () => {
+			this.resuelto = true;
 			this.onCancel();
 			this.close();
 		});
-		const ok = row.createEl("button", { text: "Marcar como hecha", cls: "mod-cta" });
+		const ok = row.createEl("button", { text: this.textoOk, cls: "mod-cta" });
 		ok.addEventListener("click", () => {
+			this.resuelto = true;
 			this.onOk();
 			this.close();
 		});
@@ -550,5 +583,6 @@ class ConfirmacionModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+		if (!this.resuelto) this.onCancel();
 	}
 }

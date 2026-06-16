@@ -5005,6 +5005,8 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     super(leaf);
     this.renderTimer = null;
     this.seleccionFiltro = /* @__PURE__ */ new Set();
+    /** Si ya se aplicó la selección por defecto del filtro de colaborador. */
+    this.filtroColabInit = false;
     this.tiposFiltro = /* @__PURE__ */ new Set();
     this.desde = 1;
     /** Filtro de épicas (valores seleccionados). Todas marcadas por defecto. */
@@ -5066,7 +5068,22 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     } catch (e) {
       console.error("gestion-de-epicas: error al recolectar", e);
     }
+    this.aplicarFiltroColabPorDefecto();
     this.render();
+  }
+  /** La primera vez (modo colaborador) deja marcados en el filtro solo los
+   * colaboradores que tienen incidencias asignadas + "Sin asignar". Después
+   * respeta lo que elija el usuario. */
+  aplicarFiltroColabPorDefecto() {
+    if (this.cfg.agruparPor !== "colaborador" || this.filtroColabInit)
+      return;
+    this.filtroColabInit = true;
+    for (const g of this.grupos) {
+      if (g.filtroClave && g.filtroClave !== SIN_ASIGNAR && g.items.length > 0) {
+        this.seleccionFiltro.add(g.filtroClave);
+      }
+    }
+    this.seleccionFiltro.add(SIN_ASIGNAR);
   }
   /** Renderiza protegido: ante cualquier error muestra el mensaje en vez de
    * dejar la pestaña en blanco. */
@@ -5343,13 +5360,23 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
                 this.app,
                 "Marcar como hecha",
                 "\xBFMarcar esta incidencia como hecha? Su estado pasar\xE1 a completado.",
+                "Marcar como hecha",
                 () => void this.marcarEstado(inc.file, "completado"),
                 () => {
                   chk.checked = false;
                 }
               ).open();
             } else {
-              void this.marcarEstado(inc.file, "por-hacer");
+              new ConfirmacionModal(
+                this.app,
+                "Marcar como pendiente",
+                "\xBFQuitar el estado de completado de esta incidencia? Volver\xE1 a Por hacer.",
+                "Marcar como pendiente",
+                () => void this.marcarEstado(inc.file, "por-hacer"),
+                () => {
+                  chk.checked = true;
+                }
+              ).open();
             }
           });
         }
@@ -5383,12 +5410,14 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
   }
 };
 var ConfirmacionModal = class extends import_obsidian12.Modal {
-  constructor(app, titulo, mensaje, onOk, onCancel) {
+  constructor(app, titulo, mensaje, textoOk, onOk, onCancel) {
     super(app);
     this.titulo = titulo;
     this.mensaje = mensaje;
+    this.textoOk = textoOk;
     this.onOk = onOk;
     this.onCancel = onCancel;
+    this.resuelto = false;
   }
   onOpen() {
     this.titleEl.setText(this.titulo);
@@ -5396,17 +5425,21 @@ var ConfirmacionModal = class extends import_obsidian12.Modal {
     const row = this.contentEl.createDiv({ cls: "gf-botones" });
     const cancelar = row.createEl("button", { text: "Cancelar" });
     cancelar.addEventListener("click", () => {
+      this.resuelto = true;
       this.onCancel();
       this.close();
     });
-    const ok = row.createEl("button", { text: "Marcar como hecha", cls: "mod-cta" });
+    const ok = row.createEl("button", { text: this.textoOk, cls: "mod-cta" });
     ok.addEventListener("click", () => {
+      this.resuelto = true;
       this.onOk();
       this.close();
     });
   }
   onClose() {
     this.contentEl.empty();
+    if (!this.resuelto)
+      this.onCancel();
   }
 };
 
