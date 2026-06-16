@@ -35,6 +35,8 @@ export interface VistaColabConfig {
 	conEpicaFilter: boolean;
 	/** Si permite marcar como hecha y filtrar completadas (solo incidencias). */
 	conMarcarHecha: boolean;
+	/** Agrupación: por colaborador (incidencias) o por épica/historia (documentos). */
+	agruparPor: "colaborador" | "contexto";
 	/** "incidencia" | "documento" (para textos). */
 	singular: string;
 }
@@ -47,6 +49,7 @@ export const CONFIG_INCIDENCIAS: VistaColabConfig = {
 	incluyeTareasPendientes: true,
 	conEpicaFilter: false,
 	conMarcarHecha: true,
+	agruparPor: "colaborador",
 	singular: "incidencia",
 };
 
@@ -58,6 +61,7 @@ export const CONFIG_DOCUMENTOS: VistaColabConfig = {
 	incluyeTareasPendientes: false,
 	conEpicaFilter: true,
 	conMarcarHecha: false,
+	agruparPor: "contexto",
 	singular: "documento",
 };
 
@@ -79,10 +83,17 @@ export class TareasColaboradorView extends ItemView {
 	/** Filtro de épicas (valores seleccionados). Todas marcadas por defecto. */
 	private epicaSeleccion = new Set<string>();
 	private epicaConocidas = new Set<string>();
-	/** Mostrar incidencias completadas (tachadas). Por defecto, ocultas. */
-	private verCompletadas = false;
-	private porColaborador = new Map<string, IncidenciaAsignada[]>();
-	private sinAsignar: IncidenciaAsignada[] = [];
+	/** Mostrar incidencias completadas (tachadas). Marcado por defecto. */
+	private verCompletadas = true;
+	/** Grupos a pintar (por colaborador o por épica/historia, según config). */
+	private grupos: Array<{
+		clave: string;
+		color?: string;
+		conProgreso: boolean;
+		/** Solo en modo colaborador: clave del filtro (nombre o "Sin asignar"). */
+		filtroClave?: string;
+		items: IncidenciaAsignada[];
+	}> = [];
 
 	constructor(leaf: WorkspaceLeaf, plugin: GestorFuncionesPlugin, cfg: VistaColabConfig) {
 		super(leaf);
@@ -162,14 +173,18 @@ export class TareasColaboradorView extends ItemView {
 	}
 
 	private async recolectar(): Promise<void> {
-		const visibles = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
-		const nombresVisibles = new Set(visibles.map((c) => c.nombre));
-		this.porColaborador = new Map<string, IncidenciaAsignada[]>();
-		for (const colab of visibles) this.porColaborador.set(colab.nombre, []);
-		this.sinAsignar = [];
-
+		this.grupos = [];
 		const admin = this.plugin.settings.carpetaAdmin.trim();
 		if (!admin) return;
+
+		const visibles = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
+		const nombresVisibles = new Set(visibles.map((c) => c.nombre));
+		// Modo colaborador: un grupo por colaborador (en orden) + "sin asignar".
+		const porColaborador = new Map<string, IncidenciaAsignada[]>();
+		for (const colab of visibles) porColaborador.set(colab.nombre, []);
+		const sinAsignar: IncidenciaAsignada[] = [];
+		// Modo contexto: un grupo por épica/historia (orden de aparición).
+		const porContexto = new Map<string, IncidenciaAsignada[]>();
 
 		const maxSprints = this.plugin.settings.numSprints;
 		const filtrar = !(this.desde === 1 && this.hasta === maxSprints);
@@ -180,24 +195,29 @@ export class TareasColaboradorView extends ItemView {
 		};
 
 		const recoger = (ref: FuncRef, contexto: string, epicaNombre: string) => {
-			// Registra la épica para el filtro (marcada por defecto al aparecer).
 			if (!this.epicaConocidas.has(epicaNombre)) {
 				this.epicaConocidas.add(epicaNombre);
 				this.epicaSeleccion.add(epicaNombre);
 			}
 			for (const inc of this.listar(ref)) {
 				const item: IncidenciaAsignada = { ...inc, contexto, epicaNombre };
-				// Solo cuentan los colaboradores activos; si no queda ninguno, va a
-				// "sin asignar" (para que el elemento nunca desaparezca).
+				if (this.cfg.agruparPor === "contexto") {
+					const lista = porContexto.get(contexto) ?? [];
+					lista.push(item);
+					porContexto.set(contexto, lista);
+					continue;
+				}
+				// Modo colaborador: solo asignados activos; si no queda ninguno, va
+				// a "sin asignar" (para que nunca desaparezca).
 				const asignados = getAsignados(this.app, inc.file).filter((n) => nombresVisibles.has(n));
 				if (asignados.length === 0) {
-					this.sinAsignar.push(item);
+					sinAsignar.push(item);
 					continue;
 				}
 				for (const nombre of asignados) {
-					const lista = this.porColaborador.get(nombre) ?? [];
+					const lista = porColaborador.get(nombre) ?? [];
 					lista.push(item);
-					this.porColaborador.set(nombre, lista);
+					porColaborador.set(nombre, lista);
 				}
 			}
 		};
@@ -209,6 +229,28 @@ export class TareasColaboradorView extends ItemView {
 				const fnPasa = epicaPasa || (await pasaSprints(fn));
 				if (fnPasa) recoger(fn, `${epica.nombre} › ${fn.nombre}`, epica.nombre);
 			}
+		}
+
+		if (this.cfg.agruparPor === "contexto") {
+			for (const clave of [...porContexto.keys()].sort((a, b) => a.localeCompare(b, "es"))) {
+				this.grupos.push({ clave, conProgreso: false, items: porContexto.get(clave) ?? [] });
+			}
+		} else {
+			for (const colab of visibles) {
+				this.grupos.push({
+					clave: colab.nombre,
+					color: colab.color,
+					conProgreso: true,
+					filtroClave: colab.nombre,
+					items: porColaborador.get(colab.nombre) ?? [],
+				});
+			}
+			this.grupos.push({
+				clave: "Incidencias sin asignar",
+				conProgreso: false,
+				filtroClave: SIN_ASIGNAR,
+				items: sinAsignar,
+			});
 		}
 	}
 
@@ -248,22 +290,21 @@ export class TareasColaboradorView extends ItemView {
 			const filtroColab = this.seleccionFiltro;
 			let algo = false;
 
-			const nombres = [...this.porColaborador.keys()]
-				.filter((n) => filtroColab.size === 0 || filtroColab.has(n))
-				.sort((a, b) => a.localeCompare(b, "es"));
-
-			for (const nombre of nombres) {
-				const lista = visiblesDe(this.porColaborador.get(nombre) ?? []);
-				const color = this.plugin.settings.colaboradores.find((c) => c.nombre === nombre)?.color;
-				this.renderTarjetaGrupo(cuerpo, nombre, lista, color, true);
-				algo = true;
-			}
-
-			const mostrarSin = filtroColab.size === 0 || filtroColab.has(SIN_ASIGNAR);
-			const sinFiltradas = visiblesDe(this.sinAsignar);
-			if (mostrarSin && sinFiltradas.length > 0) {
-				const titulo = plural.charAt(0).toUpperCase() + plural.slice(1) + " sin asignar";
-				this.renderTarjetaGrupo(cuerpo, titulo, sinFiltradas, undefined, false);
+			for (const grupo of this.grupos) {
+				// En modo colaborador, el filtro de colaborador decide qué grupos se ven.
+				if (
+					this.cfg.agruparPor === "colaborador" &&
+					filtroColab.size > 0 &&
+					!(grupo.filtroClave && filtroColab.has(grupo.filtroClave))
+				) {
+					continue;
+				}
+				const items = visiblesDe(grupo.items);
+				// Los grupos vacíos solo se muestran en modo colaborador (cada
+				// colaborador tiene su tarjeta aunque no tenga elementos).
+				if (items.length === 0 && this.cfg.agruparPor === "contexto") continue;
+				if (items.length === 0 && grupo.filtroClave === SIN_ASIGNAR) continue;
+				this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso);
 				algo = true;
 			}
 
@@ -335,20 +376,22 @@ export class TareasColaboradorView extends ItemView {
 			onChange: () => renderCuerpo(),
 		});
 
-		// Filtro por colaborador (incluye "Sin asignar").
-		const colabsFiltro: Etiqueta[] = [
-			...this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
-			{ nombre: SIN_ASIGNAR, color: "#B9BEC6" },
-		];
-		barra.createEl("span", { text: "Colaborador", cls: "gf-roadmap-lbl" });
-		crearSelectorEtiquetas({
-			parent: barra,
-			etiquetas: colabsFiltro,
-			seleccion: this.seleccionFiltro,
-			textoBtn: "Filtrar por colaborador",
-			textoVacio: "No hay colaboradores registrados.",
-			onChange: () => renderCuerpo(),
-		});
+		// Filtro por colaborador (solo en modo colaborador; los documentos no lo tienen).
+		if (this.cfg.agruparPor === "colaborador") {
+			const colabsFiltro: Etiqueta[] = [
+				...this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+				{ nombre: SIN_ASIGNAR, color: "#B9BEC6" },
+			];
+			barra.createEl("span", { text: "Colaborador", cls: "gf-roadmap-lbl" });
+			crearSelectorEtiquetas({
+				parent: barra,
+				etiquetas: colabsFiltro,
+				seleccion: this.seleccionFiltro,
+				textoBtn: "Filtrar por colaborador",
+				textoVacio: "No hay colaboradores registrados.",
+				onChange: () => renderCuerpo(),
+			});
+		}
 
 		// Ver completadas (solo incidencias).
 		if (this.cfg.conMarcarHecha) {

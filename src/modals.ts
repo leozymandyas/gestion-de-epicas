@@ -527,6 +527,7 @@ export class MoverIncidenciaModal extends GestorModal {
 			singular: "incidencia",
 			tipos: () => plugin.settings.incidencias,
 			accionConfig: "Configurar incidencias",
+			conColaboradores: true,
 			...cfg,
 		};
 	}
@@ -731,6 +732,9 @@ export interface ConfigTipoNota {
 	tipos: () => Etiqueta[];
 	/** Acción de configuración a la que se remite si no hay tipos. */
 	accionConfig: string;
+	/** Si ofrece asignar colaboradores al crear (las incidencias sí; los
+	 * documentos no). Por defecto, true. */
+	conColaboradores: boolean;
 }
 
 export class CrearIncidenciaModal extends GestorModal {
@@ -744,6 +748,7 @@ export class CrearIncidenciaModal extends GestorModal {
 			singular: "incidencia",
 			tipos: () => plugin.settings.incidencias,
 			accionConfig: "Configurar incidencias",
+			conColaboradores: true,
 			...cfg,
 		};
 	}
@@ -767,17 +772,19 @@ export class CrearIncidenciaModal extends GestorModal {
 			"Aparece en el cuerpo de la nota (sección Descripción)"
 		);
 
-		// Colaboradores como chips.
+		// Colaboradores como chips (los documentos no llevan colaboradores).
 		const colabSel = new Set<string>();
-		const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-		colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
-		crearSelectorEtiquetas({
-			parent: colWrap.createDiv(),
-			etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
-			seleccion: colabSel,
-			textoBtn: "Asignar colaboradores…",
-			textoVacio: "No hay colaboradores registrados.",
-		});
+		if (this.cfg.conColaboradores) {
+			const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
+			colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
+			crearSelectorEtiquetas({
+				parent: colWrap.createDiv(),
+				etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+				seleccion: colabSel,
+				textoBtn: "Asignar colaboradores…",
+				textoVacio: "No hay colaboradores registrados.",
+			});
+		}
 
 		this.botones(async () => {
 			this.limpiarError(func);

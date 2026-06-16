@@ -370,6 +370,7 @@ export default class GestorFuncionesPlugin extends Plugin {
 					singular: "documento",
 					tipos: () => this.settings.documentos,
 					accionConfig: "Configurar documentos",
+					conColaboradores: false,
 				}).open();
 				break;
 			case "editarDocumento":

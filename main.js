@@ -1623,7 +1623,7 @@ var INCIDENCIAS_DEFECTO = [
 ];
 var DOCUMENTOS_DEFECTO = [
   { nombre: "Documento", color: "#2D9CFF", visible: true },
-  { nombre: "Nota reuni\xF3n", color: "#C950E8", visible: true },
+  { nombre: "Apunte de reuni\xF3n", color: "#C950E8", visible: true },
   { nombre: "Regla de negocio", color: "#2BC275", visible: true }
 ];
 var CARRILES_DEFECTO = [
@@ -2869,6 +2869,7 @@ var MoverIncidenciaModal = class extends GestorModal {
       singular: "incidencia",
       tipos: () => plugin.settings.incidencias,
       accionConfig: "Configurar incidencias",
+      conColaboradores: true,
       ...cfg
     };
   }
@@ -3060,6 +3061,7 @@ var CrearIncidenciaModal = class extends GestorModal {
       singular: "incidencia",
       tipos: () => plugin.settings.incidencias,
       accionConfig: "Configurar incidencias",
+      conColaboradores: true,
       ...cfg
     };
   }
@@ -3080,15 +3082,17 @@ var CrearIncidenciaModal = class extends GestorModal {
       "Aparece en el cuerpo de la nota (secci\xF3n Descripci\xF3n)"
     );
     const colabSel = /* @__PURE__ */ new Set();
-    const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-    colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
-    crearSelectorEtiquetas({
-      parent: colWrap.createDiv(),
-      etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
-      seleccion: colabSel,
-      textoBtn: "Asignar colaboradores\u2026",
-      textoVacio: "No hay colaboradores registrados."
-    });
+    if (this.cfg.conColaboradores) {
+      const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
+      colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
+      crearSelectorEtiquetas({
+        parent: colWrap.createDiv(),
+        etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+        seleccion: colabSel,
+        textoBtn: "Asignar colaboradores\u2026",
+        textoVacio: "No hay colaboradores registrados."
+      });
+    }
     this.botones(async () => {
       var _a;
       this.limpiarError(func);
@@ -4982,6 +4986,7 @@ var CONFIG_INCIDENCIAS = {
   incluyeTareasPendientes: true,
   conEpicaFilter: false,
   conMarcarHecha: true,
+  agruparPor: "colaborador",
   singular: "incidencia"
 };
 var CONFIG_DOCUMENTOS = {
@@ -4992,6 +4997,7 @@ var CONFIG_DOCUMENTOS = {
   incluyeTareasPendientes: false,
   conEpicaFilter: true,
   conMarcarHecha: false,
+  agruparPor: "contexto",
   singular: "documento"
 };
 var TareasColaboradorView = class extends import_obsidian12.ItemView {
@@ -5004,10 +5010,10 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     /** Filtro de épicas (valores seleccionados). Todas marcadas por defecto. */
     this.epicaSeleccion = /* @__PURE__ */ new Set();
     this.epicaConocidas = /* @__PURE__ */ new Set();
-    /** Mostrar incidencias completadas (tachadas). Por defecto, ocultas. */
-    this.verCompletadas = false;
-    this.porColaborador = /* @__PURE__ */ new Map();
-    this.sinAsignar = [];
+    /** Mostrar incidencias completadas (tachadas). Marcado por defecto. */
+    this.verCompletadas = true;
+    /** Grupos a pintar (por colaborador o por épica/historia, según config). */
+    this.grupos = [];
     this.plugin = plugin;
     this.cfg = cfg;
     this.hasta = plugin.settings.numSprints;
@@ -5080,15 +5086,18 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     return this.cfg.incluyeTareasPendientes ? listIncidencias(this.app, ref, this.cfg.registro(this.plugin)) : listDocumentos(this.app, ref, this.cfg.registro(this.plugin));
   }
   async recolectar() {
-    const visibles = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
-    const nombresVisibles = new Set(visibles.map((c) => c.nombre));
-    this.porColaborador = /* @__PURE__ */ new Map();
-    for (const colab of visibles)
-      this.porColaborador.set(colab.nombre, []);
-    this.sinAsignar = [];
+    var _a, _b;
+    this.grupos = [];
     const admin = this.plugin.settings.carpetaAdmin.trim();
     if (!admin)
       return;
+    const visibles = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
+    const nombresVisibles = new Set(visibles.map((c) => c.nombre));
+    const porColaborador = /* @__PURE__ */ new Map();
+    for (const colab of visibles)
+      porColaborador.set(colab.nombre, []);
+    const sinAsignar = [];
+    const porContexto = /* @__PURE__ */ new Map();
     const maxSprints = this.plugin.settings.numSprints;
     const filtrar = !(this.desde === 1 && this.hasta === maxSprints);
     const anio = (/* @__PURE__ */ new Date()).getFullYear();
@@ -5097,22 +5106,28 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       return sprints.some((s) => s.anio === anio && s.sprint >= this.desde && s.sprint <= this.hasta);
     };
     const recoger = (ref, contexto, epicaNombre) => {
-      var _a;
+      var _a2, _b2;
       if (!this.epicaConocidas.has(epicaNombre)) {
         this.epicaConocidas.add(epicaNombre);
         this.epicaSeleccion.add(epicaNombre);
       }
       for (const inc of this.listar(ref)) {
         const item = { ...inc, contexto, epicaNombre };
+        if (this.cfg.agruparPor === "contexto") {
+          const lista = (_a2 = porContexto.get(contexto)) != null ? _a2 : [];
+          lista.push(item);
+          porContexto.set(contexto, lista);
+          continue;
+        }
         const asignados = getAsignados(this.app, inc.file).filter((n) => nombresVisibles.has(n));
         if (asignados.length === 0) {
-          this.sinAsignar.push(item);
+          sinAsignar.push(item);
           continue;
         }
         for (const nombre of asignados) {
-          const lista = (_a = this.porColaborador.get(nombre)) != null ? _a : [];
+          const lista = (_b2 = porColaborador.get(nombre)) != null ? _b2 : [];
           lista.push(item);
-          this.porColaborador.set(nombre, lista);
+          porColaborador.set(nombre, lista);
         }
       }
     };
@@ -5125,6 +5140,27 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
         if (fnPasa)
           recoger(fn, `${epica.nombre} \u203A ${fn.nombre}`, epica.nombre);
       }
+    }
+    if (this.cfg.agruparPor === "contexto") {
+      for (const clave of [...porContexto.keys()].sort((a, b) => a.localeCompare(b, "es"))) {
+        this.grupos.push({ clave, conProgreso: false, items: (_a = porContexto.get(clave)) != null ? _a : [] });
+      }
+    } else {
+      for (const colab of visibles) {
+        this.grupos.push({
+          clave: colab.nombre,
+          color: colab.color,
+          conProgreso: true,
+          filtroClave: colab.nombre,
+          items: (_b = porColaborador.get(colab.nombre)) != null ? _b : []
+        });
+      }
+      this.grupos.push({
+        clave: "Incidencias sin asignar",
+        conProgreso: false,
+        filtroClave: SIN_ASIGNAR,
+        items: sinAsignar
+      });
     }
   }
   renderInterno() {
@@ -5151,22 +5187,19 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     const pasaEpica = (inc) => !this.cfg.conEpicaFilter || this.epicaSeleccion.has(inc.epicaNombre);
     const visiblesDe = (lista) => lista.filter((i) => pasaTipo(i) && pasaEpica(i));
     const renderCuerpo = () => {
-      var _a, _b;
       cuerpo.empty();
       const filtroColab = this.seleccionFiltro;
       let algo = false;
-      const nombres = [...this.porColaborador.keys()].filter((n) => filtroColab.size === 0 || filtroColab.has(n)).sort((a, b) => a.localeCompare(b, "es"));
-      for (const nombre of nombres) {
-        const lista = visiblesDe((_a = this.porColaborador.get(nombre)) != null ? _a : []);
-        const color = (_b = this.plugin.settings.colaboradores.find((c) => c.nombre === nombre)) == null ? void 0 : _b.color;
-        this.renderTarjetaGrupo(cuerpo, nombre, lista, color, true);
-        algo = true;
-      }
-      const mostrarSin = filtroColab.size === 0 || filtroColab.has(SIN_ASIGNAR);
-      const sinFiltradas = visiblesDe(this.sinAsignar);
-      if (mostrarSin && sinFiltradas.length > 0) {
-        const titulo = plural.charAt(0).toUpperCase() + plural.slice(1) + " sin asignar";
-        this.renderTarjetaGrupo(cuerpo, titulo, sinFiltradas, void 0, false);
+      for (const grupo of this.grupos) {
+        if (this.cfg.agruparPor === "colaborador" && filtroColab.size > 0 && !(grupo.filtroClave && filtroColab.has(grupo.filtroClave))) {
+          continue;
+        }
+        const items = visiblesDe(grupo.items);
+        if (items.length === 0 && this.cfg.agruparPor === "contexto")
+          continue;
+        if (items.length === 0 && grupo.filtroClave === SIN_ASIGNAR)
+          continue;
+        this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso);
         algo = true;
       }
       if (!algo) {
@@ -5232,19 +5265,21 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       textoVacio: `No hay tipos de ${this.cfg.singular}.`,
       onChange: () => renderCuerpo()
     });
-    const colabsFiltro = [
-      ...this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
-      { nombre: SIN_ASIGNAR, color: "#B9BEC6" }
-    ];
-    barra.createEl("span", { text: "Colaborador", cls: "gf-roadmap-lbl" });
-    crearSelectorEtiquetas({
-      parent: barra,
-      etiquetas: colabsFiltro,
-      seleccion: this.seleccionFiltro,
-      textoBtn: "Filtrar por colaborador",
-      textoVacio: "No hay colaboradores registrados.",
-      onChange: () => renderCuerpo()
-    });
+    if (this.cfg.agruparPor === "colaborador") {
+      const colabsFiltro = [
+        ...this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
+        { nombre: SIN_ASIGNAR, color: "#B9BEC6" }
+      ];
+      barra.createEl("span", { text: "Colaborador", cls: "gf-roadmap-lbl" });
+      crearSelectorEtiquetas({
+        parent: barra,
+        etiquetas: colabsFiltro,
+        seleccion: this.seleccionFiltro,
+        textoBtn: "Filtrar por colaborador",
+        textoVacio: "No hay colaboradores registrados.",
+        onChange: () => renderCuerpo()
+      });
+    }
     if (this.cfg.conMarcarHecha) {
       const verLabel = barra.createEl("label", { cls: "gf-chk" });
       const verChk = verLabel.createEl("input", { type: "checkbox" });
@@ -5647,7 +5682,8 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
           titulo: "Crear documento",
           singular: "documento",
           tipos: () => this.settings.documentos,
-          accionConfig: "Configurar documentos"
+          accionConfig: "Configurar documentos",
+          conColaboradores: false
         }).open();
         break;
       case "editarDocumento":

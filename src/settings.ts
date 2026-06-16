@@ -78,7 +78,7 @@ export const INCIDENCIAS_DEFECTO: Etiqueta[] = [
 /** Tipos de documento sembrados por defecto; editables y eliminables. */
 export const DOCUMENTOS_DEFECTO: Etiqueta[] = [
 	{ nombre: "Documento", color: "#2D9CFF", visible: true },
-	{ nombre: "Nota reunión", color: "#C950E8", visible: true },
+	{ nombre: "Apunte de reunión", color: "#C950E8", visible: true },
 	{ nombre: "Regla de negocio", color: "#2BC275", visible: true },
 ];
 
