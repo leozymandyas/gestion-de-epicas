@@ -92,29 +92,35 @@ export class TareasColaboradorView extends ItemView {
 	}
 
 	getViewType(): string {
-		return this.cfg.viewType;
+		return this.cfg?.viewType ?? VIEW_TYPE_COLABORADORES;
 	}
 
 	getDisplayText(): string {
-		return `${this.cfg.titulo} — Gestión de épicas`;
+		return `${this.cfg?.titulo ?? "Colaboradores"} — Gestión de épicas`;
 	}
 
 	getIcon(): string {
-		return this.cfg.icon;
+		return this.cfg?.icon ?? "users";
 	}
 
 	async onOpen(): Promise<void> {
-		const refrescar = (file: TAbstractFile) => {
-			const admin = normalizePath(this.plugin.settings.carpetaAdmin.trim() || "/");
-			if (file.path === admin || file.path.startsWith(admin + "/")) this.renderSoon();
-		};
-		this.registerEvent(this.app.vault.on("create", refrescar));
-		this.registerEvent(this.app.vault.on("delete", refrescar));
-		this.registerEvent(this.app.vault.on("rename", refrescar));
-		const s = this.plugin.settings;
-		this.desde = Math.min(Math.max(s.sprintActual.sprint, 1), s.numSprints);
-		if (this.hasta < this.desde) this.hasta = this.desde;
-		await this.recargar();
+		try {
+			const refrescar = (file: TAbstractFile) => {
+				const admin = normalizePath(this.plugin.settings.carpetaAdmin.trim() || "/");
+				if (file.path === admin || file.path.startsWith(admin + "/")) this.renderSoon();
+			};
+			this.registerEvent(this.app.vault.on("create", refrescar));
+			this.registerEvent(this.app.vault.on("delete", refrescar));
+			this.registerEvent(this.app.vault.on("rename", refrescar));
+			const s = this.plugin.settings;
+			const sprint = s.sprintActual?.sprint ?? 1;
+			this.desde = Math.min(Math.max(sprint, 1), s.numSprints || 1);
+			if (this.hasta < this.desde) this.hasta = this.desde;
+			await this.recargar();
+		} catch (e) {
+			console.error("gestion-de-epicas: error en onOpen", e);
+			this.render();
+		}
 	}
 
 	private renderSoon(): void {
@@ -210,6 +216,11 @@ export class TareasColaboradorView extends ItemView {
 		const cont = this.contentEl;
 		cont.empty();
 		cont.addClass("gf-colab");
+
+		if (!this.cfg) {
+			cont.createEl("p", { cls: "gf-kanban-vacio", text: "Vista sin configurar." });
+			return;
+		}
 
 		if (!carpetasGestionListas(this.app)) {
 			const aviso = cont.createDiv({ cls: "gf-kanban-aviso" });

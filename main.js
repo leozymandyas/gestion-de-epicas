@@ -5013,28 +5013,38 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     this.hasta = plugin.settings.numSprints;
   }
   getViewType() {
-    return this.cfg.viewType;
+    var _a, _b;
+    return (_b = (_a = this.cfg) == null ? void 0 : _a.viewType) != null ? _b : VIEW_TYPE_COLABORADORES;
   }
   getDisplayText() {
-    return `${this.cfg.titulo} \u2014 Gesti\xF3n de \xE9picas`;
+    var _a, _b;
+    return `${(_b = (_a = this.cfg) == null ? void 0 : _a.titulo) != null ? _b : "Colaboradores"} \u2014 Gesti\xF3n de \xE9picas`;
   }
   getIcon() {
-    return this.cfg.icon;
+    var _a, _b;
+    return (_b = (_a = this.cfg) == null ? void 0 : _a.icon) != null ? _b : "users";
   }
   async onOpen() {
-    const refrescar = (file) => {
-      const admin = (0, import_obsidian12.normalizePath)(this.plugin.settings.carpetaAdmin.trim() || "/");
-      if (file.path === admin || file.path.startsWith(admin + "/"))
-        this.renderSoon();
-    };
-    this.registerEvent(this.app.vault.on("create", refrescar));
-    this.registerEvent(this.app.vault.on("delete", refrescar));
-    this.registerEvent(this.app.vault.on("rename", refrescar));
-    const s = this.plugin.settings;
-    this.desde = Math.min(Math.max(s.sprintActual.sprint, 1), s.numSprints);
-    if (this.hasta < this.desde)
-      this.hasta = this.desde;
-    await this.recargar();
+    var _a, _b;
+    try {
+      const refrescar = (file) => {
+        const admin = (0, import_obsidian12.normalizePath)(this.plugin.settings.carpetaAdmin.trim() || "/");
+        if (file.path === admin || file.path.startsWith(admin + "/"))
+          this.renderSoon();
+      };
+      this.registerEvent(this.app.vault.on("create", refrescar));
+      this.registerEvent(this.app.vault.on("delete", refrescar));
+      this.registerEvent(this.app.vault.on("rename", refrescar));
+      const s = this.plugin.settings;
+      const sprint = (_b = (_a = s.sprintActual) == null ? void 0 : _a.sprint) != null ? _b : 1;
+      this.desde = Math.min(Math.max(sprint, 1), s.numSprints || 1);
+      if (this.hasta < this.desde)
+        this.hasta = this.desde;
+      await this.recargar();
+    } catch (e) {
+      console.error("gestion-de-epicas: error en onOpen", e);
+      this.render();
+    }
   }
   renderSoon() {
     if (this.renderTimer !== null)
@@ -5121,6 +5131,10 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     const cont = this.contentEl;
     cont.empty();
     cont.addClass("gf-colab");
+    if (!this.cfg) {
+      cont.createEl("p", { cls: "gf-kanban-vacio", text: "Vista sin configurar." });
+      return;
+    }
     if (!carpetasGestionListas(this.app)) {
       const aviso = cont.createDiv({ cls: "gf-kanban-aviso" });
       aviso.createEl("p", {
