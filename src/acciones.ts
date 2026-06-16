@@ -44,8 +44,9 @@ const REGISTRO: Accion[] = [
 	// Colaboradores
 	{ id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
 	{ id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
-	// Incidencias — tableros
-	{ id: "gestion-incidencias", icono: "kanban-square", texto: "Gestión de incidencias", accion: (p) => void p.abrirKanban() },
+	// Tableros por colaborador. El tablero "Gestión de incidencias" (kanban) se
+	// dejó oculto del panel a propósito; sigue accesible por comando
+	// ("Abrir gestión de incidencias") y se puede reactivar añadiéndolo a una sección.
 	{ id: "incidencias-por-colaborador", icono: "user-check", texto: "Incidencias por colaborador", accion: (p) => void p.abrirTareasColaborador() },
 ];
 
@@ -56,8 +57,7 @@ const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }>
 	{ id: "epicas-admin", titulo: "Administración", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas", "editar-nombre", "mover-historia", "archivar-epica"] },
 	{ id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
 	{ id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia", "editar-incidencia"] },
-	{ id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
-	{ id: "incidencias-tableros", titulo: "Tableros", acciones: ["gestion-incidencias", "incidencias-por-colaborador"] },
+	{ id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador", "incidencias-por-colaborador"] },
 	{ id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "editar-documento", "documentos"] },
 ];
 
@@ -69,7 +69,7 @@ const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }>
 const TABS: Array<{ id: string; titulo: string; secciones: string[] }> = [
 	{ id: "favoritos", titulo: "Favoritos", secciones: [] },
 	{ id: "epicas", titulo: "Épicas", secciones: ["epicas-admin", "epicas-tableros"] },
-	{ id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "incidencias-tableros", "documentos"] },
+	{ id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "documentos"] },
 ];
 
 /** Resuelve un id de acción integrada a su acción ejecutable. */

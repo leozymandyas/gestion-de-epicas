@@ -475,7 +475,7 @@ export class TareasColaboradorView extends ItemView {
 							new ConfirmacionModal(
 								this.app,
 								"Marcar como hecha",
-								"Esta incidencia se marcará como hecha también en el tablero de incidencias. ¿Continuar?",
+								"¿Marcar esta incidencia como hecha? Su estado pasará a completado.",
 								() => void this.marcarEstado(inc.file, "completado"),
 								() => {
 									chk.checked = false;

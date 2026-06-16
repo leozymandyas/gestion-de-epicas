@@ -2165,8 +2165,9 @@ var REGISTRO = [
   // Colaboradores
   { id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
   { id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
-  // Incidencias — tableros
-  { id: "gestion-incidencias", icono: "kanban-square", texto: "Gesti\xF3n de incidencias", accion: (p) => void p.abrirKanban() },
+  // Tableros por colaborador. El tablero "Gestión de incidencias" (kanban) se
+  // dejó oculto del panel a propósito; sigue accesible por comando
+  // ("Abrir gestión de incidencias") y se puede reactivar añadiéndolo a una sección.
   { id: "incidencias-por-colaborador", icono: "user-check", texto: "Incidencias por colaborador", accion: (p) => void p.abrirTareasColaborador() }
 ];
 var POR_ID = new Map(REGISTRO.map((a) => [a.id, a]));
@@ -2174,14 +2175,13 @@ var SECCIONES_PANEL = [
   { id: "epicas-admin", titulo: "Administraci\xF3n", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas", "editar-nombre", "mover-historia", "archivar-epica"] },
   { id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
   { id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia", "editar-incidencia"] },
-  { id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
-  { id: "incidencias-tableros", titulo: "Tableros", acciones: ["gestion-incidencias", "incidencias-por-colaborador"] },
+  { id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador", "incidencias-por-colaborador"] },
   { id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "editar-documento", "documentos"] }
 ];
 var TABS = [
   { id: "favoritos", titulo: "Favoritos", secciones: [] },
   { id: "epicas", titulo: "\xC9picas", secciones: ["epicas-admin", "epicas-tableros"] },
-  { id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "incidencias-tableros", "documentos"] }
+  { id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "documentos"] }
 ];
 function resolverAccion(_plugin, id) {
   var _a;
@@ -5342,7 +5342,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
               new ConfirmacionModal(
                 this.app,
                 "Marcar como hecha",
-                "Esta incidencia se marcar\xE1 como hecha tambi\xE9n en el tablero de incidencias. \xBFContinuar?",
+                "\xBFMarcar esta incidencia como hecha? Su estado pasar\xE1 a completado.",
                 () => void this.marcarEstado(inc.file, "completado"),
                 () => {
                   chk.checked = false;
