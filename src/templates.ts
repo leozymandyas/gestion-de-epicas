@@ -65,8 +65,10 @@ export function incidencia(
 	nombre: string,
 	funcSlug: string,
 	fecha: string,
-	tipoSlug: string
+	tipoSlug: string,
+	descripcion = ""
 ): string {
+	const desc = descripcion.trim() || "<!-- Escribe aquí los detalles de la incidencia -->";
 	return `---
 tipo: ${tipoSlug}
 historia: "[[${funcSlug}]]"
@@ -78,7 +80,7 @@ fecha-creacion: ${fecha}
 # ${nombre}
 
 ## Descripción
-<!-- Escribe aquí los detalles de la incidencia -->
+${desc}
 
 ## Notas
 <!-- Notas relacionadas a esta incidencia -->

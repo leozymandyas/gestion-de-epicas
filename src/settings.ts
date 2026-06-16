@@ -47,6 +47,8 @@ export interface GestorSettings {
 	colaboradores: Etiqueta[];
 	/** Tipos de incidencia configurables (mismo formato que las etiquetas). */
 	incidencias: Etiqueta[];
+	/** Tipos de documento configurables (subsistema paralelo a incidencias). */
+	documentos: Etiqueta[];
 	/** Número de sprints que se manejan (1..N). Limita roadmap, filtros y asignación. */
 	numSprints: number;
 	/** IDs de acciones marcadas como favoritas (cualquier elemento del panel). */
@@ -96,6 +98,7 @@ export const DEFAULT_SETTINGS: GestorSettings = {
 	carriles: CARRILES_DEFECTO.map((c) => ({ ...c })),
 	colaboradores: [{ ...COLABORADOR_DEFECTO }],
 	incidencias: INCIDENCIAS_DEFECTO.map((i) => ({ ...i })),
+	documentos: [],
 	numSprints: NUM_SPRINTS_DEFECTO,
 	favoritos: [],
 	ordenFunc: [],

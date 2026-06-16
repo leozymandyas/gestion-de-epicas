@@ -1366,6 +1366,33 @@
 	margin: 0 4px;
 }
 
+/* Cada incidencia/documento es una fila con su check (marcar hecha) al inicio. */
+.gf-colab-lista li {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+.gf-colab-chk {
+	margin-right: 4px;
+	flex: 0 0 auto;
+}
+/* Incidencia completada: tachada y atenuada. */
+.gf-colab-hecha {
+	opacity: 0.6;
+	text-decoration: line-through;
+}
+.gf-colab-hecha .internal-link {
+	text-decoration: line-through;
+}
+
+/* Área de texto multilínea en los modales (p. ej. la descripción). */
+.gf-campo-textarea {
+	resize: vertical;
+	min-height: 72px;
+	font-family: inherit;
+	width: 100%;
+}
+
 .gf-colab-chips {
 	margin: 0 0 6px 0;
 }

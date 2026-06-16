@@ -36,6 +36,11 @@ const REGISTRO: Accion[] = [
 	{ id: "configurar-incidencias", icono: "settings-2", texto: "Configurar incidencias", accion: (p) => p.abrirModal("configIncidencias") },
 	{ id: "crear-incidencia", icono: "circle-dot", texto: "Crear incidencia", accion: (p) => p.abrirModal("incidencia") },
 	{ id: "editar-incidencia", icono: "replace", texto: "Editar incidencia", accion: (p) => p.abrirModal("editarIncidencia") },
+	// Documentos
+	{ id: "configurar-documentos", icono: "settings-2", texto: "Configurar documentos", accion: (p) => p.abrirModal("configDocumentos") },
+	{ id: "crear-documento", icono: "file-plus", texto: "Crear documento", accion: (p) => p.abrirModal("documento") },
+	{ id: "editar-documento", icono: "replace", texto: "Editar documento", accion: (p) => p.abrirModal("editarDocumento") },
+	{ id: "documentos", icono: "file-text", texto: "Documentos", accion: (p) => void p.abrirDocumentos() },
 	// Colaboradores
 	{ id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
 	{ id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
@@ -53,6 +58,7 @@ const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }>
 	{ id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia", "editar-incidencia"] },
 	{ id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
 	{ id: "incidencias-tableros", titulo: "Tableros", acciones: ["gestion-incidencias", "incidencias-por-colaborador"] },
+	{ id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "editar-documento", "documentos"] },
 ];
 
 /**
@@ -63,7 +69,7 @@ const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }>
 const TABS: Array<{ id: string; titulo: string; secciones: string[] }> = [
 	{ id: "favoritos", titulo: "Favoritos", secciones: [] },
 	{ id: "epicas", titulo: "Épicas", secciones: ["epicas-admin", "epicas-tableros"] },
-	{ id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "incidencias-tableros"] },
+	{ id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "incidencias-tableros", "documentos"] },
 ];
 
 /** Resuelve un id de acción integrada a su acción ejecutable. */

@@ -98,6 +98,15 @@ export const CATEGORIAS: Categoria[] = [
 		},
 	},
 	{
+		clave: "documentos",
+		etiqueta: "Tipos de documento",
+		exportar: (s) => s.documentos,
+		leerArchivo: (v) => sanearEtiquetas(v),
+		aplicar: (s, v) => {
+			s.documentos = v as Etiqueta[];
+		},
+	},
+	{
 		clave: "etiquetas",
 		etiqueta: "Etiquetas de sprint",
 		exportar: (s) => s.etiquetas,

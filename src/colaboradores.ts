@@ -1,4 +1,4 @@
-import { ItemView, TAbstractFile, TFile, WorkspaceLeaf, normalizePath } from "obsidian";
+import { App, ItemView, Modal, TAbstractFile, TFile, WorkspaceLeaf, normalizePath } from "obsidian";
 import type GestorFuncionesPlugin from "./main";
 import {
 	FuncRef,
@@ -6,6 +6,7 @@ import {
 	carpetasGestionListas,
 	getAsignados,
 	leerSprints,
+	listDocumentos,
 	listFuncionalidades,
 	listFuncionalidadesDe,
 	listIncidencias,
@@ -13,47 +14,93 @@ import {
 import { Etiqueta, normalizarEstado } from "./settings";
 import { renderChipEtiqueta } from "./colores";
 import { crearSelectorEtiquetas } from "./modals";
-import { crearSelect } from "./ui";
+import { crearSelect, crearMultiSelect } from "./ui";
 
 export const VIEW_TYPE_COLABORADORES = "gestor-funciones-colaboradores";
+export const VIEW_TYPE_DOCUMENTOS = "gestor-funciones-documentos";
 
-/** Clave del grupo de incidencias sin colaborador asignado. */
+/** Clave del grupo sin colaborador asignado. */
 const SIN_ASIGNAR = "Sin asignar";
 
+/** Configura la vista (incidencias por colaborador vs documentos). */
+export interface VistaColabConfig {
+	viewType: string;
+	titulo: string;
+	icon: string;
+	/** Registro de tipos a listar (incidencias o documentos). */
+	registro: (plugin: GestorFuncionesPlugin) => Etiqueta[];
+	/** Si incluye las tareas/pendientes heredadas (solo incidencias). */
+	incluyeTareasPendientes: boolean;
+	/** Si muestra el filtro multiselect de épicas (solo documentos). */
+	conEpicaFilter: boolean;
+	/** Si permite marcar como hecha y filtrar completadas (solo incidencias). */
+	conMarcarHecha: boolean;
+	/** "incidencia" | "documento" (para textos). */
+	singular: string;
+}
+
+export const CONFIG_INCIDENCIAS: VistaColabConfig = {
+	viewType: VIEW_TYPE_COLABORADORES,
+	titulo: "Incidencias por colaborador",
+	icon: "users",
+	registro: (p) => p.settings.incidencias,
+	incluyeTareasPendientes: true,
+	conEpicaFilter: false,
+	conMarcarHecha: true,
+	singular: "incidencia",
+};
+
+export const CONFIG_DOCUMENTOS: VistaColabConfig = {
+	viewType: VIEW_TYPE_DOCUMENTOS,
+	titulo: "Documentos",
+	icon: "file-text",
+	registro: (p) => p.settings.documentos,
+	incluyeTareasPendientes: false,
+	conEpicaFilter: true,
+	conMarcarHecha: false,
+	singular: "documento",
+};
+
 interface IncidenciaAsignada extends Incidencia {
-	epica: string;
+	/** Texto de contexto (épica o "Épica › Historia"). */
+	contexto: string;
+	/** Nombre de la épica de nivel superior (para el filtro de épicas). */
+	epicaNombre: string;
 }
 
 export class TareasColaboradorView extends ItemView {
 	private plugin: GestorFuncionesPlugin;
+	private cfg: VistaColabConfig;
 	private renderTimer: number | null = null;
-	/** Colaboradores (o "Sin asignar") seleccionados en el filtro; vacío = todos. */
 	private seleccionFiltro = new Set<string>();
-	/** Tipos de incidencia (nombre) seleccionados en el filtro; vacío = todos. */
 	private tiposFiltro = new Set<string>();
-	/** Filtro de intervalo de sprints (igual que en Gestión de incidencias). */
 	private desde = 1;
 	private hasta: number;
-	/** Datos recogidos (ya filtrados por sprint) listos para pintar. */
+	/** Filtro de épicas (valores seleccionados). Todas marcadas por defecto. */
+	private epicaSeleccion = new Set<string>();
+	private epicaConocidas = new Set<string>();
+	/** Mostrar incidencias completadas (tachadas). Por defecto, ocultas. */
+	private verCompletadas = false;
 	private porColaborador = new Map<string, IncidenciaAsignada[]>();
 	private sinAsignar: IncidenciaAsignada[] = [];
 
-	constructor(leaf: WorkspaceLeaf, plugin: GestorFuncionesPlugin) {
+	constructor(leaf: WorkspaceLeaf, plugin: GestorFuncionesPlugin, cfg: VistaColabConfig) {
 		super(leaf);
 		this.plugin = plugin;
+		this.cfg = cfg;
 		this.hasta = plugin.settings.numSprints;
 	}
 
 	getViewType(): string {
-		return VIEW_TYPE_COLABORADORES;
+		return this.cfg.viewType;
 	}
 
 	getDisplayText(): string {
-		return "Incidencias por colaborador — Gestión de épicas";
+		return `${this.cfg.titulo} — Gestión de épicas`;
 	}
 
 	getIcon(): string {
-		return "users";
+		return this.cfg.icon;
 	}
 
 	async onOpen(): Promise<void> {
@@ -64,7 +111,6 @@ export class TareasColaboradorView extends ItemView {
 		this.registerEvent(this.app.vault.on("create", refrescar));
 		this.registerEvent(this.app.vault.on("delete", refrescar));
 		this.registerEvent(this.app.vault.on("rename", refrescar));
-		// Sprint inicio sugerido desde el panel (el usuario puede cambiarlo).
 		const s = this.plugin.settings;
 		this.desde = Math.min(Math.max(s.sprintActual.sprint, 1), s.numSprints);
 		if (this.hasta < this.desde) this.hasta = this.desde;
@@ -79,27 +125,27 @@ export class TareasColaboradorView extends ItemView {
 		}, 150);
 	}
 
-	/** Relee desde disco (aplicando el filtro de sprints) y vuelve a renderizar. */
 	async recargar(): Promise<void> {
 		await this.recolectar();
 		this.render();
 	}
 
+	private listar(ref: FuncRef): Incidencia[] {
+		return this.cfg.incluyeTareasPendientes
+			? listIncidencias(this.app, ref, this.cfg.registro(this.plugin))
+			: listDocumentos(this.app, ref, this.cfg.registro(this.plugin));
+	}
+
 	private async recolectar(): Promise<void> {
-		// Solo se consideran los colaboradores activos (con el check marcado).
 		const visibles = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
 		const nombresVisibles = new Set(visibles.map((c) => c.nombre));
 		this.porColaborador = new Map<string, IncidenciaAsignada[]>();
-		for (const colab of visibles) {
-			this.porColaborador.set(colab.nombre, []);
-		}
+		for (const colab of visibles) this.porColaborador.set(colab.nombre, []);
 		this.sinAsignar = [];
 
 		const admin = this.plugin.settings.carpetaAdmin.trim();
 		if (!admin) return;
 
-		// Filtro de intervalo de sprints: si no es el rango completo, solo entran
-		// incidencias de épicas/historias con sprints en ese intervalo (año actual).
 		const maxSprints = this.plugin.settings.numSprints;
 		const filtrar = !(this.desde === 1 && this.hasta === maxSprints);
 		const anio = new Date().getFullYear();
@@ -108,18 +154,23 @@ export class TareasColaboradorView extends ItemView {
 			return sprints.some((s) => s.anio === anio && s.sprint >= this.desde && s.sprint <= this.hasta);
 		};
 
-		const recoger = (ref: FuncRef, origen: string) => {
-			for (const inc of listIncidencias(this.app, ref, this.plugin.settings.incidencias)) {
+		const recoger = (ref: FuncRef, contexto: string, epicaNombre: string) => {
+			// Registra la épica para el filtro (marcada por defecto al aparecer).
+			if (!this.epicaConocidas.has(epicaNombre)) {
+				this.epicaConocidas.add(epicaNombre);
+				this.epicaSeleccion.add(epicaNombre);
+			}
+			for (const inc of this.listar(ref)) {
 				const asignados = getAsignados(this.app, inc.file);
+				const item: IncidenciaAsignada = { ...inc, contexto, epicaNombre };
 				if (asignados.length === 0) {
-					this.sinAsignar.push({ ...inc, epica: origen });
+					this.sinAsignar.push(item);
 					continue;
 				}
-				// Las asignaciones a colaboradores desactivados se ignoran.
 				for (const nombre of asignados) {
 					if (!nombresVisibles.has(nombre)) continue;
 					const lista = this.porColaborador.get(nombre) ?? [];
-					lista.push({ ...inc, epica: origen });
+					lista.push(item);
 					this.porColaborador.set(nombre, lista);
 				}
 			}
@@ -127,10 +178,10 @@ export class TareasColaboradorView extends ItemView {
 
 		for (const epica of listFuncionalidades(this.app, admin)) {
 			const epicaPasa = !filtrar || (await pasaSprints(epica));
-			if (epicaPasa) recoger(epica, epica.nombre);
+			if (epicaPasa) recoger(epica, epica.nombre, epica.nombre);
 			for (const fn of listFuncionalidadesDe(this.app, epica.folder)) {
 				const fnPasa = epicaPasa || (await pasaSprints(fn));
-				if (fnPasa) recoger(fn, `${epica.nombre} › ${fn.nombre}`);
+				if (fnPasa) recoger(fn, `${epica.nombre} › ${fn.nombre}`, epica.nombre);
 			}
 		}
 	}
@@ -150,11 +201,16 @@ export class TareasColaboradorView extends ItemView {
 			return;
 		}
 
+		const plural = this.cfg.singular === "documento" ? "documentos" : "incidencias";
 		const barra = cont.createDiv({ cls: "gf-roadmap-controles" });
 		const cuerpo = cont.createDiv();
 
 		const pasaTipo = (inc: IncidenciaAsignada) =>
 			this.tiposFiltro.size === 0 || this.tiposFiltro.has(inc.tipoNombre);
+		const pasaEpica = (inc: IncidenciaAsignada) =>
+			!this.cfg.conEpicaFilter || this.epicaSeleccion.has(inc.epicaNombre);
+		const visiblesDe = (lista: IncidenciaAsignada[]) =>
+			lista.filter((i) => pasaTipo(i) && pasaEpica(i));
 
 		const renderCuerpo = () => {
 			cuerpo.empty();
@@ -166,24 +222,24 @@ export class TareasColaboradorView extends ItemView {
 				.sort((a, b) => a.localeCompare(b, "es"));
 
 			for (const nombre of nombres) {
-				const incidencias = (this.porColaborador.get(nombre) ?? []).filter(pasaTipo);
+				const lista = visiblesDe(this.porColaborador.get(nombre) ?? []);
 				const color = this.plugin.settings.colaboradores.find((c) => c.nombre === nombre)?.color;
-				this.renderTarjetaGrupo(cuerpo, nombre, incidencias, color, true);
+				this.renderTarjetaGrupo(cuerpo, nombre, lista, color, true);
 				algo = true;
 			}
 
-			// Grupo "Incidencias sin asignar".
 			const mostrarSin = filtroColab.size === 0 || filtroColab.has(SIN_ASIGNAR);
-			const sinFiltradas = this.sinAsignar.filter(pasaTipo);
+			const sinFiltradas = visiblesDe(this.sinAsignar);
 			if (mostrarSin && sinFiltradas.length > 0) {
-				this.renderTarjetaGrupo(cuerpo, "Incidencias sin asignar", sinFiltradas, undefined, false);
+				const titulo = plural.charAt(0).toUpperCase() + plural.slice(1) + " sin asignar";
+				this.renderTarjetaGrupo(cuerpo, titulo, sinFiltradas, undefined, false);
 				algo = true;
 			}
 
 			if (!algo) {
 				cuerpo.createEl("em", {
 					cls: "gf-kanban-vacio",
-					text: "No hay incidencias para mostrar.",
+					text: `No hay ${plural} para mostrar.`,
 				});
 			}
 		};
@@ -221,13 +277,30 @@ export class TareasColaboradorView extends ItemView {
 			},
 		});
 
-		// Filtro por incidencia.
-		barra.createEl("span", { text: "Incidencia", cls: "gf-roadmap-lbl" });
+		// Filtro de épicas (solo documentos): select con checks, todas por defecto.
+		if (this.cfg.conEpicaFilter) {
+			barra.createEl("span", { text: "Épica", cls: "gf-roadmap-lbl" });
+			const opcionesEpica = [...this.epicaConocidas]
+				.sort((a, b) => a.localeCompare(b, "es"))
+				.map((n) => ({ valor: n, texto: n }));
+			crearMultiSelect({
+				parent: barra,
+				etiqueta: "Épicas",
+				opciones: opcionesEpica,
+				seleccion: this.epicaSeleccion,
+				onChange: () => renderCuerpo(),
+			});
+		}
+
+		// Filtro por tipo.
+		const etqTipo = this.cfg.singular === "documento" ? "Documento" : "Incidencia";
+		barra.createEl("span", { text: etqTipo, cls: "gf-roadmap-lbl" });
 		crearSelectorEtiquetas({
 			parent: barra,
-			etiquetas: this.plugin.settings.incidencias.filter((i) => i.visible !== false),
+			etiquetas: this.cfg.registro(this.plugin).filter((i) => i.visible !== false),
 			seleccion: this.tiposFiltro,
-			textoBtn: "Filtrar por incidencia",
+			textoBtn: `Filtrar por ${this.cfg.singular}`,
+			textoVacio: `No hay tipos de ${this.cfg.singular}.`,
 			onChange: () => renderCuerpo(),
 		});
 
@@ -246,7 +319,18 @@ export class TareasColaboradorView extends ItemView {
 			onChange: () => renderCuerpo(),
 		});
 
-		// Borra solo los filtros por incidencia y por colaborador.
+		// Ver completadas (solo incidencias).
+		if (this.cfg.conMarcarHecha) {
+			const verLabel = barra.createEl("label", { cls: "gf-chk" });
+			const verChk = verLabel.createEl("input", { type: "checkbox" });
+			verChk.checked = this.verCompletadas;
+			verLabel.appendText(" Ver completadas");
+			verChk.addEventListener("change", () => {
+				this.verCompletadas = verChk.checked;
+				renderCuerpo();
+			});
+		}
+
 		const borrar = barra.createEl("button", { text: "Borrar filtros", cls: "gf-roadmap-recargar" });
 		borrar.addEventListener("click", () => {
 			this.tiposFiltro.clear();
@@ -261,7 +345,7 @@ export class TareasColaboradorView extends ItemView {
 	}
 
 	private colorTipo(nombre: string): string {
-		return this.plugin.settings.incidencias.find((i) => i.nombre === nombre)?.color ?? "#B9BEC6";
+		return this.cfg.registro(this.plugin).find((i) => i.nombre === nombre)?.color ?? "#B9BEC6";
 	}
 
 	private renderTarjetaGrupo(
@@ -286,7 +370,7 @@ export class TareasColaboradorView extends ItemView {
 			const pct = total > 0 ? Math.round((hechas / total) * 100) : 0;
 			head.createEl("span", {
 				cls: "gf-colab-conteo",
-				text: total > 0 ? `${hechas} de ${total} hechas (${pct}%)` : "Sin incidencias",
+				text: total > 0 ? `${hechas} de ${total} hechas (${pct}%)` : "Sin elementos",
 			});
 			if (total > 0) {
 				const barraProg = tarjeta.createDiv({ cls: "gf-kanban-progreso-barra" });
@@ -297,29 +381,94 @@ export class TareasColaboradorView extends ItemView {
 			head.createEl("span", { cls: "gf-colab-conteo", text: `${incidencias.length}` });
 		}
 
-		if (incidencias.length > 0) {
+		// Las completadas se muestran tachadas (si "ver completadas") u ocultas.
+		const aMostrar = incidencias.filter(
+			(i) => this.verCompletadas || this.estadoDe(i.file) !== "completado"
+		);
+		if (aMostrar.length > 0) {
 			const ul = tarjeta.createEl("ul", { cls: "gf-colab-lista" });
-			for (const inc of incidencias) {
-				const li = ul.createEl("li");
+			for (const inc of aMostrar) {
+				const completado = this.estadoDe(inc.file) === "completado";
+				const li = ul.createEl("li", { cls: completado ? "gf-colab-hecha" : "" });
+
+				if (this.cfg.conMarcarHecha) {
+					const chk = li.createEl("input", { type: "checkbox", cls: "gf-colab-chk" });
+					chk.checked = completado;
+					chk.addEventListener("change", () => {
+						if (chk.checked) {
+							new ConfirmacionModal(
+								this.app,
+								"Marcar como hecha",
+								"Esta incidencia se marcará como hecha también en el tablero de incidencias. ¿Continuar?",
+								() => void this.marcarEstado(inc.file, "completado"),
+								() => {
+									chk.checked = false;
+								}
+							).open();
+						} else {
+							void this.marcarEstado(inc.file, "por-hacer");
+						}
+					});
+				}
+
 				renderChipEtiqueta(li, inc.tipoNombre, this.colorTipo(inc.tipoNombre));
 				const a = li.createEl("a", { cls: "internal-link", text: inc.nombre });
 				a.addEventListener("click", (e) => {
 					e.preventDefault();
 					void this.app.workspace.getLeaf(false).openFile(inc.file);
 				});
-				li.appendText(` — ${inc.epica} · ${this.estadoLegible(inc.file)}`);
+				li.appendText(` — ${inc.contexto} · ${this.estadoLegible(inc.file)}`);
 			}
 		}
 	}
 
+	private async marcarEstado(file: TFile, estado: string): Promise<void> {
+		await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+			fm.estado = estado;
+		});
+		await this.recargar();
+	}
+
 	private estadoDe(file: TFile): string {
 		const estado = (this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined)?.estado;
-		return estado ? String(estado) : "pendiente";
+		return estado ? normalizarEstado(String(estado)) : "por-hacer";
 	}
 
 	private estadoLegible(file: TFile): string {
-		const valor = this.estadoDe(file);
-		const v = normalizarEstado(valor);
-		return this.plugin.settings.carriles.find((e) => e.valor === v)?.nombre ?? valor;
+		const v = this.estadoDe(file);
+		return this.plugin.settings.carriles.find((e) => e.valor === v)?.nombre ?? v;
+	}
+}
+
+/** Modal de confirmación con advertencia (aceptar / cancelar). */
+class ConfirmacionModal extends Modal {
+	constructor(
+		app: App,
+		private titulo: string,
+		private mensaje: string,
+		private onOk: () => void,
+		private onCancel: () => void
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(this.titulo);
+		this.contentEl.createEl("p", { text: this.mensaje });
+		const row = this.contentEl.createDiv({ cls: "gf-botones" });
+		const cancelar = row.createEl("button", { text: "Cancelar" });
+		cancelar.addEventListener("click", () => {
+			this.onCancel();
+			this.close();
+		});
+		const ok = row.createEl("button", { text: "Marcar como hecha", cls: "mod-cta" });
+		ok.addEventListener("click", () => {
+			this.onOk();
+			this.close();
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
 	}
 }

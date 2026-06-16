@@ -99,7 +99,8 @@ fecha-creacion: ${fecha}
 <!-- Notas relacionadas a esta tarea -->
 `;
 }
-function incidencia(nombre, funcSlug, fecha, tipoSlug) {
+function incidencia(nombre, funcSlug, fecha, tipoSlug, descripcion = "") {
+  const desc = descripcion.trim() || "<!-- Escribe aqu\xED los detalles de la incidencia -->";
   return `---
 tipo: ${tipoSlug}
 historia: "[[${funcSlug}]]"
@@ -111,7 +112,7 @@ fecha-creacion: ${fecha}
 # ${nombre}
 
 ## Descripci\xF3n
-<!-- Escribe aqu\xED los detalles de la incidencia -->
+${desc}
 
 ## Notas
 <!-- Notas relacionadas a esta incidencia -->
@@ -447,6 +448,11 @@ function listIncidencias(app, func, tipos = []) {
       nivel: 0
     });
   }
+  out.push(...listNotasDeTipos(app, func, tipos));
+  return out;
+}
+function listNotasDeTipos(app, func, tipos) {
+  const out = [];
   for (const tipo of tipos) {
     const slug = slugify(tipo.nombre);
     const dir = func.folder.children.find(
@@ -467,6 +473,9 @@ function listIncidencias(app, func, tipos = []) {
     }
   }
   return out;
+}
+function listDocumentos(app, func, tipos) {
+  return listNotasDeTipos(app, func, tipos);
 }
 function getAsignados(app, file) {
   var _a, _b;
@@ -529,12 +538,12 @@ async function createTarea(app, func, slug, nombre) {
   await appendToSection(app, func.file, "## Tareas", `- [ ] [[${slug}|${nombre}]]`);
   return file;
 }
-async function createIncidencia(app, func, base, nombre, tipoSlug, tipoNombre) {
+async function createIncidencia(app, func, base, nombre, tipoSlug, tipoNombre, descripcion = "") {
   const dir = `${func.folder.path}/${tipoSlug}`;
   await ensureFolder(app, dir);
   const file = await app.vault.create(
     (0, import_obsidian.normalizePath)(`${dir}/${base}.md`),
-    incidencia(nombre, func.slug, hoy(), tipoSlug)
+    incidencia(nombre, func.slug, hoy(), tipoSlug, descripcion)
   );
   await appendToSection(app, func.file, `## ${tipoNombre}`, `- [ ] [[${base}|${nombre}]]`);
   return file;
@@ -947,6 +956,15 @@ var CATEGORIAS = [
     leerArchivo: (v) => sanearEtiquetas(v),
     aplicar: (s, v) => {
       s.incidencias = v;
+    }
+  },
+  {
+    clave: "documentos",
+    etiqueta: "Tipos de documento",
+    exportar: (s) => s.documentos,
+    leerArchivo: (v) => sanearEtiquetas(v),
+    aplicar: (s, v) => {
+      s.documentos = v;
     }
   },
   {
@@ -1620,6 +1638,7 @@ var DEFAULT_SETTINGS = {
   carriles: CARRILES_DEFECTO.map((c) => ({ ...c })),
   colaboradores: [{ ...COLABORADOR_DEFECTO }],
   incidencias: INCIDENCIAS_DEFECTO.map((i) => ({ ...i })),
+  documentos: [],
   numSprints: NUM_SPRINTS_DEFECTO,
   favoritos: [],
   ordenFunc: [],
@@ -1909,6 +1928,51 @@ var ICONO_PLUGIN_SVG = `<g transform="scale(0.19230769)" fill="currentColor"><g 
 
 // src/ui.ts
 var import_obsidian6 = require("obsidian");
+function crearMultiSelect(opts) {
+  const wrap = opts.parent.createDiv({ cls: "gf-multiselect" });
+  const btn = wrap.createEl("button", { cls: "gf-multiselect-btn" });
+  const panel = wrap.createDiv({ cls: "gf-multiselect-panel" });
+  let abierto = false;
+  const onDocClick = (ev) => {
+    if (!wrap.contains(ev.target))
+      setAbierto(false);
+  };
+  const setAbierto = (v) => {
+    abierto = v;
+    panel.toggleClass("gf-multiselect-abierto", v);
+    if (v)
+      activeDocument.addEventListener("click", onDocClick);
+    else
+      activeDocument.removeEventListener("click", onDocClick);
+  };
+  setAbierto(false);
+  const actualizarLabel = () => {
+    const total = opts.opciones.length;
+    const n = opts.opciones.filter((o) => opts.seleccion.has(o.valor)).length;
+    const resumen = total > 0 && n === total ? "Todos" : n === 0 ? "Ninguno" : `${n} sel.`;
+    btn.setText(`${opts.etiqueta}: ${resumen} \u25BE`);
+  };
+  for (const o of opts.opciones) {
+    const fila = panel.createEl("label", { cls: "gf-chk" });
+    const chk = fila.createEl("input", { type: "checkbox" });
+    chk.checked = opts.seleccion.has(o.valor);
+    fila.appendText(` ${o.texto}`);
+    chk.addEventListener("change", () => {
+      if (chk.checked)
+        opts.seleccion.add(o.valor);
+      else
+        opts.seleccion.delete(o.valor);
+      actualizarLabel();
+      opts.onChange();
+    });
+  }
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setAbierto(!abierto);
+  });
+  actualizarLabel();
+}
 function crearSelect(opts) {
   var _a, _b, _c, _d;
   const wrap = opts.parent.createDiv({ cls: "gf-multiselect gf-select" });
@@ -2088,6 +2152,11 @@ var REGISTRO = [
   { id: "configurar-incidencias", icono: "settings-2", texto: "Configurar incidencias", accion: (p) => p.abrirModal("configIncidencias") },
   { id: "crear-incidencia", icono: "circle-dot", texto: "Crear incidencia", accion: (p) => p.abrirModal("incidencia") },
   { id: "editar-incidencia", icono: "replace", texto: "Editar incidencia", accion: (p) => p.abrirModal("editarIncidencia") },
+  // Documentos
+  { id: "configurar-documentos", icono: "settings-2", texto: "Configurar documentos", accion: (p) => p.abrirModal("configDocumentos") },
+  { id: "crear-documento", icono: "file-plus", texto: "Crear documento", accion: (p) => p.abrirModal("documento") },
+  { id: "editar-documento", icono: "replace", texto: "Editar documento", accion: (p) => p.abrirModal("editarDocumento") },
+  { id: "documentos", icono: "file-text", texto: "Documentos", accion: (p) => void p.abrirDocumentos() },
   // Colaboradores
   { id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
   { id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
@@ -2101,12 +2170,13 @@ var SECCIONES_PANEL = [
   { id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
   { id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia", "editar-incidencia"] },
   { id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
-  { id: "incidencias-tableros", titulo: "Tableros", acciones: ["gestion-incidencias", "incidencias-por-colaborador"] }
+  { id: "incidencias-tableros", titulo: "Tableros", acciones: ["gestion-incidencias", "incidencias-por-colaborador"] },
+  { id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "editar-documento", "documentos"] }
 ];
 var TABS = [
   { id: "favoritos", titulo: "Favoritos", secciones: [] },
   { id: "epicas", titulo: "\xC9picas", secciones: ["epicas-admin", "epicas-tableros"] },
-  { id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "incidencias-tableros"] }
+  { id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "incidencias-tableros", "documentos"] }
 ];
 function resolverAccion(_plugin, id) {
   var _a;
@@ -2376,6 +2446,16 @@ var GestorModal = class extends import_obsidian8.Modal {
       }
     });
     return { wrap, input, error };
+  }
+  /** Área de texto multilínea (p. ej. para la descripción que va al cuerpo). */
+  campoTextArea(label, placeholder) {
+    const wrap = this.contentEl.createDiv({ cls: "gf-campo" });
+    wrap.createEl("label", { text: label, cls: "gf-campo-label" });
+    const input = wrap.createEl("textarea", {
+      cls: "gf-campo-input gf-campo-textarea",
+      attr: { placeholder, rows: "4" }
+    });
+    return { wrap, input };
   }
   campoSelect(label, placeholder) {
     const wrap = this.contentEl.createDiv({ cls: "gf-campo" });
@@ -2777,19 +2857,32 @@ var MoverHistoriaModal = class extends GestorModal {
   }
 };
 var MoverIncidenciaModal = class extends GestorModal {
+  constructor(plugin, cfg) {
+    super(plugin);
+    this.cfg = {
+      titulo: "Editar incidencia",
+      singular: "incidencia",
+      tipos: () => plugin.settings.incidencias,
+      accionConfig: "Configurar incidencias",
+      ...cfg
+    };
+  }
   onOpen() {
-    this.titleEl.setText("Editar incidencia");
+    this.titleEl.setText(this.cfg.titulo);
     this.modalEl.addClass("gf-modal-sprints");
     const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
-    this.seccion("Incidencia a editar");
+    this.seccion(`${this.cfg.singular === "documento" ? "Documento" : "Incidencia"} a editar`);
     const epica = this.campoEpica(funcs);
     const fn = this.campoFuncionalidad(epica);
-    const incCampo = this.campoSelect("Incidencia", "Seleccionar incidencia");
+    const incCampo = this.campoSelect(
+      this.cfg.singular === "documento" ? "Documento" : "Incidencia",
+      "Seleccionar"
+    );
     let incidencias = [];
     const repoblarInc = () => {
       var _a;
       const base = (_a = fn.getFn()) != null ? _a : epica.getFunc();
-      incidencias = base ? listIncidencias(this.app, base, this.plugin.settings.incidencias) : [];
+      incidencias = base ? listIncidencias(this.app, base, this.cfg.tipos()) : [];
       this.setOpciones(
         incCampo.select,
         "Seleccionar incidencia",
@@ -2810,7 +2903,7 @@ var MoverIncidenciaModal = class extends GestorModal {
     this.setOpciones(
       tipo.select,
       "Seleccionar tipo",
-      this.plugin.settings.incidencias.map((i) => ({ value: i.nombre, label: i.nombre }))
+      this.cfg.tipos().map((i) => ({ value: i.nombre, label: i.nombre }))
     );
     incCampo.select.addEventListener("change", () => {
       const i = incSel();
@@ -2954,22 +3047,33 @@ var CrearTareaModal = class extends GestorModal {
   }
 };
 var CrearIncidenciaModal = class extends GestorModal {
-  constructor() {
-    super(...arguments);
+  constructor(plugin, cfg) {
+    super(plugin);
     this.duplicadoPendiente = null;
+    this.cfg = {
+      titulo: "Crear incidencia",
+      singular: "incidencia",
+      tipos: () => plugin.settings.incidencias,
+      accionConfig: "Configurar incidencias",
+      ...cfg
+    };
   }
   onOpen() {
-    this.titleEl.setText("Crear incidencia");
+    this.titleEl.setText(this.cfg.titulo);
     const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
     const func = this.campoEpica(funcs);
     const fn = this.campoFuncionalidad(func);
-    const tipo = this.campoSelect("Tipo de incidencia", "Seleccionar tipo");
+    const tipo = this.campoSelect(`Tipo de ${this.cfg.singular}`, "Seleccionar tipo");
     this.setOpciones(
       tipo.select,
       "Seleccionar tipo",
-      this.plugin.settings.incidencias.map((i) => ({ value: i.nombre, label: i.nombre }))
+      this.cfg.tipos().map((i) => ({ value: i.nombre, label: i.nombre }))
     );
-    const nombre = this.campoTexto("Nombre de la incidencia", "Escribe nombre de la incidencia");
+    const nombre = this.campoTexto(`Nombre`, `Escribe el nombre`);
+    const descripcion = this.campoTextArea(
+      "Descripci\xF3n",
+      "Aparece en el cuerpo de la nota (secci\xF3n Descripci\xF3n)"
+    );
     const colabSel = /* @__PURE__ */ new Set();
     const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
     colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
@@ -3023,23 +3127,24 @@ var CrearIncidenciaModal = class extends GestorModal {
           base,
           valor,
           tipoSlug,
-          tipoNombre
+          tipoNombre,
+          descripcion.input.value
         );
         await this.aplicarAsignados(file, [...colabSel]);
         this.close();
         await this.abrirNota(file);
       } catch (e) {
         console.error(e);
-        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: error al crear la incidencia.");
+        new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: error al crear ${this.cfg.singular === "documento" ? "el documento" : "la incidencia"}.`);
       }
     });
     if (funcs.length === 0) {
       this.sinEpicas(func);
     }
-    if (this.plugin.settings.incidencias.length === 0) {
+    if (this.cfg.tipos().length === 0) {
       tipo.wrap.createDiv({
         cls: "gf-campo-aviso",
-        text: 'No hay tipos de incidencia. Cr\xE9alos con "Configurar incidencias".'
+        text: `No hay tipos. Cr\xE9alos con "${this.cfg.accionConfig}".`
       });
     }
   }
@@ -4862,31 +4967,54 @@ function conAlpha(hex, alpha) {
 // src/colaboradores.ts
 var import_obsidian12 = require("obsidian");
 var VIEW_TYPE_COLABORADORES = "gestor-funciones-colaboradores";
+var VIEW_TYPE_DOCUMENTOS = "gestor-funciones-documentos";
 var SIN_ASIGNAR = "Sin asignar";
+var CONFIG_INCIDENCIAS = {
+  viewType: VIEW_TYPE_COLABORADORES,
+  titulo: "Incidencias por colaborador",
+  icon: "users",
+  registro: (p) => p.settings.incidencias,
+  incluyeTareasPendientes: true,
+  conEpicaFilter: false,
+  conMarcarHecha: true,
+  singular: "incidencia"
+};
+var CONFIG_DOCUMENTOS = {
+  viewType: VIEW_TYPE_DOCUMENTOS,
+  titulo: "Documentos",
+  icon: "file-text",
+  registro: (p) => p.settings.documentos,
+  incluyeTareasPendientes: false,
+  conEpicaFilter: true,
+  conMarcarHecha: false,
+  singular: "documento"
+};
 var TareasColaboradorView = class extends import_obsidian12.ItemView {
-  constructor(leaf, plugin) {
+  constructor(leaf, plugin, cfg) {
     super(leaf);
     this.renderTimer = null;
-    /** Colaboradores (o "Sin asignar") seleccionados en el filtro; vacío = todos. */
     this.seleccionFiltro = /* @__PURE__ */ new Set();
-    /** Tipos de incidencia (nombre) seleccionados en el filtro; vacío = todos. */
     this.tiposFiltro = /* @__PURE__ */ new Set();
-    /** Filtro de intervalo de sprints (igual que en Gestión de incidencias). */
     this.desde = 1;
-    /** Datos recogidos (ya filtrados por sprint) listos para pintar. */
+    /** Filtro de épicas (valores seleccionados). Todas marcadas por defecto. */
+    this.epicaSeleccion = /* @__PURE__ */ new Set();
+    this.epicaConocidas = /* @__PURE__ */ new Set();
+    /** Mostrar incidencias completadas (tachadas). Por defecto, ocultas. */
+    this.verCompletadas = false;
     this.porColaborador = /* @__PURE__ */ new Map();
     this.sinAsignar = [];
     this.plugin = plugin;
+    this.cfg = cfg;
     this.hasta = plugin.settings.numSprints;
   }
   getViewType() {
-    return VIEW_TYPE_COLABORADORES;
+    return this.cfg.viewType;
   }
   getDisplayText() {
-    return "Incidencias por colaborador \u2014 Gesti\xF3n de \xE9picas";
+    return `${this.cfg.titulo} \u2014 Gesti\xF3n de \xE9picas`;
   }
   getIcon() {
-    return "users";
+    return this.cfg.icon;
   }
   async onOpen() {
     const refrescar = (file) => {
@@ -4911,18 +5039,19 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       void this.recargar();
     }, 150);
   }
-  /** Relee desde disco (aplicando el filtro de sprints) y vuelve a renderizar. */
   async recargar() {
     await this.recolectar();
     this.render();
+  }
+  listar(ref) {
+    return this.cfg.incluyeTareasPendientes ? listIncidencias(this.app, ref, this.cfg.registro(this.plugin)) : listDocumentos(this.app, ref, this.cfg.registro(this.plugin));
   }
   async recolectar() {
     const visibles = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
     const nombresVisibles = new Set(visibles.map((c) => c.nombre));
     this.porColaborador = /* @__PURE__ */ new Map();
-    for (const colab of visibles) {
+    for (const colab of visibles)
       this.porColaborador.set(colab.nombre, []);
-    }
     this.sinAsignar = [];
     const admin = this.plugin.settings.carpetaAdmin.trim();
     if (!admin)
@@ -4934,19 +5063,24 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       const sprints = await leerSprints(this.app, ref);
       return sprints.some((s) => s.anio === anio && s.sprint >= this.desde && s.sprint <= this.hasta);
     };
-    const recoger = (ref, origen) => {
+    const recoger = (ref, contexto, epicaNombre) => {
       var _a;
-      for (const inc of listIncidencias(this.app, ref, this.plugin.settings.incidencias)) {
+      if (!this.epicaConocidas.has(epicaNombre)) {
+        this.epicaConocidas.add(epicaNombre);
+        this.epicaSeleccion.add(epicaNombre);
+      }
+      for (const inc of this.listar(ref)) {
         const asignados = getAsignados(this.app, inc.file);
+        const item = { ...inc, contexto, epicaNombre };
         if (asignados.length === 0) {
-          this.sinAsignar.push({ ...inc, epica: origen });
+          this.sinAsignar.push(item);
           continue;
         }
         for (const nombre of asignados) {
           if (!nombresVisibles.has(nombre))
             continue;
           const lista = (_a = this.porColaborador.get(nombre)) != null ? _a : [];
-          lista.push({ ...inc, epica: origen });
+          lista.push(item);
           this.porColaborador.set(nombre, lista);
         }
       }
@@ -4954,11 +5088,11 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     for (const epica of listFuncionalidades(this.app, admin)) {
       const epicaPasa = !filtrar || await pasaSprints(epica);
       if (epicaPasa)
-        recoger(epica, epica.nombre);
+        recoger(epica, epica.nombre, epica.nombre);
       for (const fn of listFuncionalidadesDe(this.app, epica.folder)) {
         const fnPasa = epicaPasa || await pasaSprints(fn);
         if (fnPasa)
-          recoger(fn, `${epica.nombre} \u203A ${fn.nombre}`);
+          recoger(fn, `${epica.nombre} \u203A ${fn.nombre}`, epica.nombre);
       }
     }
   }
@@ -4975,9 +5109,12 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       btn.addEventListener("click", () => void this.plugin.abrirAcciones());
       return;
     }
+    const plural = this.cfg.singular === "documento" ? "documentos" : "incidencias";
     const barra = cont.createDiv({ cls: "gf-roadmap-controles" });
     const cuerpo = cont.createDiv();
     const pasaTipo = (inc) => this.tiposFiltro.size === 0 || this.tiposFiltro.has(inc.tipoNombre);
+    const pasaEpica = (inc) => !this.cfg.conEpicaFilter || this.epicaSeleccion.has(inc.epicaNombre);
+    const visiblesDe = (lista) => lista.filter((i) => pasaTipo(i) && pasaEpica(i));
     const renderCuerpo = () => {
       var _a, _b;
       cuerpo.empty();
@@ -4985,21 +5122,22 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       let algo = false;
       const nombres = [...this.porColaborador.keys()].filter((n) => filtroColab.size === 0 || filtroColab.has(n)).sort((a, b) => a.localeCompare(b, "es"));
       for (const nombre of nombres) {
-        const incidencias = ((_a = this.porColaborador.get(nombre)) != null ? _a : []).filter(pasaTipo);
+        const lista = visiblesDe((_a = this.porColaborador.get(nombre)) != null ? _a : []);
         const color = (_b = this.plugin.settings.colaboradores.find((c) => c.nombre === nombre)) == null ? void 0 : _b.color;
-        this.renderTarjetaGrupo(cuerpo, nombre, incidencias, color, true);
+        this.renderTarjetaGrupo(cuerpo, nombre, lista, color, true);
         algo = true;
       }
       const mostrarSin = filtroColab.size === 0 || filtroColab.has(SIN_ASIGNAR);
-      const sinFiltradas = this.sinAsignar.filter(pasaTipo);
+      const sinFiltradas = visiblesDe(this.sinAsignar);
       if (mostrarSin && sinFiltradas.length > 0) {
-        this.renderTarjetaGrupo(cuerpo, "Incidencias sin asignar", sinFiltradas, void 0, false);
+        const titulo = plural.charAt(0).toUpperCase() + plural.slice(1) + " sin asignar";
+        this.renderTarjetaGrupo(cuerpo, titulo, sinFiltradas, void 0, false);
         algo = true;
       }
       if (!algo) {
         cuerpo.createEl("em", {
           cls: "gf-kanban-vacio",
-          text: "No hay incidencias para mostrar."
+          text: `No hay ${plural} para mostrar.`
         });
       }
     };
@@ -5038,12 +5176,25 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
         void this.recargar();
       }
     });
-    barra.createEl("span", { text: "Incidencia", cls: "gf-roadmap-lbl" });
+    if (this.cfg.conEpicaFilter) {
+      barra.createEl("span", { text: "\xC9pica", cls: "gf-roadmap-lbl" });
+      const opcionesEpica = [...this.epicaConocidas].sort((a, b) => a.localeCompare(b, "es")).map((n) => ({ valor: n, texto: n }));
+      crearMultiSelect({
+        parent: barra,
+        etiqueta: "\xC9picas",
+        opciones: opcionesEpica,
+        seleccion: this.epicaSeleccion,
+        onChange: () => renderCuerpo()
+      });
+    }
+    const etqTipo = this.cfg.singular === "documento" ? "Documento" : "Incidencia";
+    barra.createEl("span", { text: etqTipo, cls: "gf-roadmap-lbl" });
     crearSelectorEtiquetas({
       parent: barra,
-      etiquetas: this.plugin.settings.incidencias.filter((i) => i.visible !== false),
+      etiquetas: this.cfg.registro(this.plugin).filter((i) => i.visible !== false),
       seleccion: this.tiposFiltro,
-      textoBtn: "Filtrar por incidencia",
+      textoBtn: `Filtrar por ${this.cfg.singular}`,
+      textoVacio: `No hay tipos de ${this.cfg.singular}.`,
       onChange: () => renderCuerpo()
     });
     const colabsFiltro = [
@@ -5059,6 +5210,16 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       textoVacio: "No hay colaboradores registrados.",
       onChange: () => renderCuerpo()
     });
+    if (this.cfg.conMarcarHecha) {
+      const verLabel = barra.createEl("label", { cls: "gf-chk" });
+      const verChk = verLabel.createEl("input", { type: "checkbox" });
+      verChk.checked = this.verCompletadas;
+      verLabel.appendText(" Ver completadas");
+      verChk.addEventListener("change", () => {
+        this.verCompletadas = verChk.checked;
+        renderCuerpo();
+      });
+    }
     const borrar = barra.createEl("button", { text: "Borrar filtros", cls: "gf-roadmap-recargar" });
     borrar.addEventListener("click", () => {
       this.tiposFiltro.clear();
@@ -5071,7 +5232,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
   }
   colorTipo(nombre) {
     var _a, _b;
-    return (_b = (_a = this.plugin.settings.incidencias.find((i) => i.nombre === nombre)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
+    return (_b = (_a = this.cfg.registro(this.plugin).find((i) => i.nombre === nombre)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
   }
   renderTarjetaGrupo(cuerpo, titulo, incidencias, color, conProgreso) {
     const tarjeta = cuerpo.createDiv({ cls: "gf-colab-card" });
@@ -5087,7 +5248,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       const pct = total > 0 ? Math.round(hechas / total * 100) : 0;
       head.createEl("span", {
         cls: "gf-colab-conteo",
-        text: total > 0 ? `${hechas} de ${total} hechas (${pct}%)` : "Sin incidencias"
+        text: total > 0 ? `${hechas} de ${total} hechas (${pct}%)` : "Sin elementos"
       });
       if (total > 0) {
         const barraProg = tarjeta.createDiv({ cls: "gf-kanban-progreso-barra" });
@@ -5097,30 +5258,85 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     } else {
       head.createEl("span", { cls: "gf-colab-conteo", text: `${incidencias.length}` });
     }
-    if (incidencias.length > 0) {
+    const aMostrar = incidencias.filter(
+      (i) => this.verCompletadas || this.estadoDe(i.file) !== "completado"
+    );
+    if (aMostrar.length > 0) {
       const ul = tarjeta.createEl("ul", { cls: "gf-colab-lista" });
-      for (const inc of incidencias) {
-        const li = ul.createEl("li");
+      for (const inc of aMostrar) {
+        const completado = this.estadoDe(inc.file) === "completado";
+        const li = ul.createEl("li", { cls: completado ? "gf-colab-hecha" : "" });
+        if (this.cfg.conMarcarHecha) {
+          const chk = li.createEl("input", { type: "checkbox", cls: "gf-colab-chk" });
+          chk.checked = completado;
+          chk.addEventListener("change", () => {
+            if (chk.checked) {
+              new ConfirmacionModal(
+                this.app,
+                "Marcar como hecha",
+                "Esta incidencia se marcar\xE1 como hecha tambi\xE9n en el tablero de incidencias. \xBFContinuar?",
+                () => void this.marcarEstado(inc.file, "completado"),
+                () => {
+                  chk.checked = false;
+                }
+              ).open();
+            } else {
+              void this.marcarEstado(inc.file, "por-hacer");
+            }
+          });
+        }
         renderChipEtiqueta(li, inc.tipoNombre, this.colorTipo(inc.tipoNombre));
         const a = li.createEl("a", { cls: "internal-link", text: inc.nombre });
         a.addEventListener("click", (e) => {
           e.preventDefault();
           void this.app.workspace.getLeaf(false).openFile(inc.file);
         });
-        li.appendText(` \u2014 ${inc.epica} \xB7 ${this.estadoLegible(inc.file)}`);
+        li.appendText(` \u2014 ${inc.contexto} \xB7 ${this.estadoLegible(inc.file)}`);
       }
     }
+  }
+  async marcarEstado(file, estado) {
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      fm.estado = estado;
+    });
+    await this.recargar();
   }
   estadoDe(file) {
     var _a, _b;
     const estado = (_b = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b.estado;
-    return estado ? String(estado) : "pendiente";
+    return estado ? normalizarEstado(String(estado)) : "por-hacer";
   }
   estadoLegible(file) {
     var _a, _b;
-    const valor = this.estadoDe(file);
-    const v = normalizarEstado(valor);
-    return (_b = (_a = this.plugin.settings.carriles.find((e) => e.valor === v)) == null ? void 0 : _a.nombre) != null ? _b : valor;
+    const v = this.estadoDe(file);
+    return (_b = (_a = this.plugin.settings.carriles.find((e) => e.valor === v)) == null ? void 0 : _a.nombre) != null ? _b : v;
+  }
+};
+var ConfirmacionModal = class extends import_obsidian12.Modal {
+  constructor(app, titulo, mensaje, onOk, onCancel) {
+    super(app);
+    this.titulo = titulo;
+    this.mensaje = mensaje;
+    this.onOk = onOk;
+    this.onCancel = onCancel;
+  }
+  onOpen() {
+    this.titleEl.setText(this.titulo);
+    this.contentEl.createEl("p", { text: this.mensaje });
+    const row = this.contentEl.createDiv({ cls: "gf-botones" });
+    const cancelar = row.createEl("button", { text: "Cancelar" });
+    cancelar.addEventListener("click", () => {
+      this.onCancel();
+      this.close();
+    });
+    const ok = row.createEl("button", { text: "Marcar como hecha", cls: "mod-cta" });
+    ok.addEventListener("click", () => {
+      this.onOk();
+      this.close();
+    });
+  }
+  onClose() {
+    this.contentEl.empty();
   }
 };
 
@@ -5147,7 +5363,14 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
     this.registerView(VIEW_TYPE_KANBAN, (leaf) => new KanbanView(leaf, this));
     this.registerView(VIEW_TYPE_GESTOR_FN, (leaf) => new GestorFuncionalidadesView(leaf, this));
     this.registerView(VIEW_TYPE_ROADMAP, (leaf) => new RoadmapView(leaf, this));
-    this.registerView(VIEW_TYPE_COLABORADORES, (leaf) => new TareasColaboradorView(leaf, this));
+    this.registerView(
+      VIEW_TYPE_COLABORADORES,
+      (leaf) => new TareasColaboradorView(leaf, this, CONFIG_INCIDENCIAS)
+    );
+    this.registerView(
+      VIEW_TYPE_DOCUMENTOS,
+      (leaf) => new TareasColaboradorView(leaf, this, CONFIG_DOCUMENTOS)
+    );
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu, editor) => {
         menu.addItem(
@@ -5214,6 +5437,26 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
       id: "editar-incidencia",
       name: "Editar incidencia (tipo / mover)",
       callback: () => this.abrirModal("editarIncidencia")
+    });
+    this.addCommand({
+      id: "configurar-documentos",
+      name: "Configurar documentos",
+      callback: () => this.abrirModal("configDocumentos")
+    });
+    this.addCommand({
+      id: "crear-documento",
+      name: "Crear documento",
+      callback: () => this.abrirModal("documento")
+    });
+    this.addCommand({
+      id: "editar-documento",
+      name: "Editar documento (tipo / mover)",
+      callback: () => this.abrirModal("editarDocumento")
+    });
+    this.addCommand({
+      id: "abrir-documentos",
+      name: "Abrir documentos",
+      callback: () => void this.abrirDocumentos()
     });
     this.addCommand({
       id: "mover-epica",
@@ -5350,6 +5593,38 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
       case "editarIncidencia":
         new MoverIncidenciaModal(this).open();
         break;
+      case "configDocumentos":
+        new GestorEtiquetasModal(this, {
+          titulo: "Configurar documentos",
+          nuevoNombre: "Documento",
+          conVisible: true,
+          avisoEliminar: "Se quitar\xE1 el tipo de la configuraci\xF3n. Los documentos y sus carpetas se conservan.",
+          alRenombrar: (ant, nue) => renombrarTipoIncidencia(this.app, this.settings.carpetaAdmin, ant, nue),
+          secciones: [
+            {
+              id: "documentos",
+              titulo: "Documentos",
+              getLista: () => this.settings.documentos
+            }
+          ]
+        }).open();
+        break;
+      case "documento":
+        new CrearIncidenciaModal(this, {
+          titulo: "Crear documento",
+          singular: "documento",
+          tipos: () => this.settings.documentos,
+          accionConfig: "Configurar documentos"
+        }).open();
+        break;
+      case "editarDocumento":
+        new MoverIncidenciaModal(this, {
+          titulo: "Editar documento",
+          singular: "documento",
+          tipos: () => this.settings.documentos,
+          accionConfig: "Configurar documentos"
+        }).open();
+        break;
     }
   }
   /** Abre la nota en una pestaña; si ya está abierta, va a esa pestaña en vez
@@ -5399,6 +5674,9 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
   async abrirTareasColaborador() {
     await this.abrirVistaEnPestana(VIEW_TYPE_COLABORADORES);
   }
+  async abrirDocumentos() {
+    await this.abrirVistaEnPestana(VIEW_TYPE_DOCUMENTOS);
+  }
   /**
    * Abre la vista como pestaña del área principal. Si quedó anclada en un
    * panel lateral (layouts guardados de versiones anteriores), la desancla
@@ -5416,7 +5694,7 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
     await this.app.workspace.revealLeaf(hoja);
   }
   async loadSettings() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
     const guardado = await this.loadData();
     const primeraVez = guardado === null || guardado === void 0;
     const data = guardado != null ? guardado : {};
@@ -5457,10 +5735,11 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
     });
     const colaboradores = primeraVez ? [{ ...COLABORADOR_DEFECTO }] : ((_c = data.colaboradores) != null ? _c : []).map(conVisible);
     const incidencias = data.incidencias === void 0 ? INCIDENCIAS_DEFECTO.map((i) => ({ ...i })) : data.incidencias.map(conVisible);
-    const favoritos = ((_d = data.favoritos) != null ? _d : []).map(String);
+    const documentos = ((_d = data.documentos) != null ? _d : []).map(conVisible);
+    const favoritos = ((_e = data.favoritos) != null ? _e : []).map(String);
     const numCrudo = Math.trunc(Number(data.numSprints));
     const numSprints = Number.isFinite(numCrudo) && numCrudo >= 1 ? numCrudo : NUM_SPRINTS_DEFECTO;
-    const filtro = (_e = data.kanban) == null ? void 0 : _e.filtroSprints;
+    const filtro = (_f = data.kanban) == null ? void 0 : _f.filtroSprints;
     const enRango = (v, defecto) => v && v >= 1 && v <= numSprints ? v : defecto;
     const anioValido = (v) => {
       const n = Math.trunc(Number(v));
@@ -5473,17 +5752,18 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
       carriles,
       colaboradores,
       incidencias,
+      documentos,
       numSprints,
       favoritos,
-      ordenFunc: ((_f = data.ordenFunc) != null ? _f : []).map(String),
+      ordenFunc: ((_g = data.ordenFunc) != null ? _g : []).map(String),
       sprintActual: {
-        anio: anioValido((_g = data.sprintActual) == null ? void 0 : _g.anio),
-        sprint: enRango((_h = data.sprintActual) == null ? void 0 : _h.sprint, 1)
+        anio: anioValido((_h = data.sprintActual) == null ? void 0 : _h.anio),
+        sprint: enRango((_i = data.sprintActual) == null ? void 0 : _i.sprint, 1)
       },
       kanban: {
-        tareas: { ...(_j = (_i = data.kanban) == null ? void 0 : _i.tareas) != null ? _j : {} },
-        pendientes: { ...(_l = (_k = data.kanban) == null ? void 0 : _k.pendientes) != null ? _l : {} },
-        ordenIncidencias: ((_n = (_m = data.kanban) == null ? void 0 : _m.ordenIncidencias) != null ? _n : []).map(String),
+        tareas: { ...(_k = (_j = data.kanban) == null ? void 0 : _j.tareas) != null ? _k : {} },
+        pendientes: { ...(_m = (_l = data.kanban) == null ? void 0 : _l.pendientes) != null ? _m : {} },
+        ordenIncidencias: ((_o = (_n = data.kanban) == null ? void 0 : _n.ordenIncidencias) != null ? _o : []).map(String),
         filtroSprints: {
           desde: enRango(filtro == null ? void 0 : filtro.desde, 1),
           hasta: enRango(filtro == null ? void 0 : filtro.hasta, numSprints)

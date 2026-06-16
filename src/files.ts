@@ -407,6 +407,21 @@ export function listIncidencias(
 			nivel: 0,
 		});
 	}
+	out.push(...listNotasDeTipos(app, func, tipos));
+	return out;
+}
+
+/**
+ * Notas guardadas en las carpetas de los tipos dados (carpeta = slug del tipo),
+ * SIN incluir las tareas/pendientes heredadas. Lo usan tanto las incidencias como
+ * los documentos (cada uno con su propio registro de tipos).
+ */
+export function listNotasDeTipos(
+	app: App,
+	func: FuncRef,
+	tipos: { nombre: string }[]
+): Incidencia[] {
+	const out: Incidencia[] = [];
 	for (const tipo of tipos) {
 		const slug = slugify(tipo.nombre);
 		const dir = func.folder.children.find(
@@ -426,6 +441,16 @@ export function listIncidencias(
 		}
 	}
 	return out;
+}
+
+/** Documentos de una historia/épica: notas en las carpetas de los tipos de
+ * documento (no incluye tareas/pendientes ni incidencias). */
+export function listDocumentos(
+	app: App,
+	func: FuncRef,
+	tipos: { nombre: string }[]
+): Incidencia[] {
+	return listNotasDeTipos(app, func, tipos);
 }
 
 /** Colaboradores asignados en el frontmatter `asignados` de una incidencia. */
@@ -516,13 +541,14 @@ export async function createIncidencia(
 	base: string,
 	nombre: string,
 	tipoSlug: string,
-	tipoNombre: string
+	tipoNombre: string,
+	descripcion = ""
 ): Promise<TFile> {
 	const dir = `${func.folder.path}/${tipoSlug}`;
 	await ensureFolder(app, dir);
 	const file = await app.vault.create(
 		normalizePath(`${dir}/${base}.md`),
-		tpl.incidencia(nombre, func.slug, hoy(), tipoSlug)
+		tpl.incidencia(nombre, func.slug, hoy(), tipoSlug, descripcion)
 	);
 	await appendToSection(app, func.file, `## ${tipoNombre}`, `- [ ] [[${base}|${nombre}]]`);
 	return file;

@@ -32,7 +32,13 @@ import { AccionesView, VIEW_TYPE_ACCIONES } from "./acciones";
 import { KanbanView, VIEW_TYPE_KANBAN } from "./kanban";
 import { GestorFuncionalidadesView, VIEW_TYPE_GESTOR_FN } from "./gestor-funcionalidades";
 import { RoadmapView, VIEW_TYPE_ROADMAP } from "./roadmap";
-import { TareasColaboradorView, VIEW_TYPE_COLABORADORES } from "./colaboradores";
+import {
+	CONFIG_DOCUMENTOS,
+	CONFIG_INCIDENCIAS,
+	TareasColaboradorView,
+	VIEW_TYPE_COLABORADORES,
+	VIEW_TYPE_DOCUMENTOS,
+} from "./colaboradores";
 import { ICONO_PLUGIN, ICONO_PLUGIN_SVG } from "./icono";
 import {
 	AgregarLinkModal,
@@ -67,7 +73,10 @@ export type TipoModal =
 	| "incidencia"
 	| "editarNombre"
 	| "moverHistoria"
-	| "editarIncidencia";
+	| "editarIncidencia"
+	| "configDocumentos"
+	| "documento"
+	| "editarDocumento";
 
 export default class GestorFuncionesPlugin extends Plugin {
 	settings: GestorSettings = DEFAULT_SETTINGS;
@@ -96,7 +105,14 @@ export default class GestorFuncionesPlugin extends Plugin {
 		this.registerView(VIEW_TYPE_KANBAN, (leaf) => new KanbanView(leaf, this));
 		this.registerView(VIEW_TYPE_GESTOR_FN, (leaf) => new GestorFuncionalidadesView(leaf, this));
 		this.registerView(VIEW_TYPE_ROADMAP, (leaf) => new RoadmapView(leaf, this));
-		this.registerView(VIEW_TYPE_COLABORADORES, (leaf) => new TareasColaboradorView(leaf, this));
+		this.registerView(
+			VIEW_TYPE_COLABORADORES,
+			(leaf) => new TareasColaboradorView(leaf, this, CONFIG_INCIDENCIAS)
+		);
+		this.registerView(
+			VIEW_TYPE_DOCUMENTOS,
+			(leaf) => new TareasColaboradorView(leaf, this, CONFIG_DOCUMENTOS)
+		);
 
 		// "Agregar link" en el menú contextual del editor, en cualquier nota.
 		this.registerEvent(
@@ -171,6 +187,26 @@ export default class GestorFuncionesPlugin extends Plugin {
 			id: "editar-incidencia",
 			name: "Editar incidencia (tipo / mover)",
 			callback: () => this.abrirModal("editarIncidencia"),
+		});
+		this.addCommand({
+			id: "configurar-documentos",
+			name: "Configurar documentos",
+			callback: () => this.abrirModal("configDocumentos"),
+		});
+		this.addCommand({
+			id: "crear-documento",
+			name: "Crear documento",
+			callback: () => this.abrirModal("documento"),
+		});
+		this.addCommand({
+			id: "editar-documento",
+			name: "Editar documento (tipo / mover)",
+			callback: () => this.abrirModal("editarDocumento"),
+		});
+		this.addCommand({
+			id: "abrir-documentos",
+			name: "Abrir documentos",
+			callback: () => void this.abrirDocumentos(),
 		});
 		this.addCommand({
 			id: "mover-epica",
@@ -310,6 +346,39 @@ export default class GestorFuncionesPlugin extends Plugin {
 			case "editarIncidencia":
 				new MoverIncidenciaModal(this).open();
 				break;
+			case "configDocumentos":
+				new GestorEtiquetasModal(this, {
+					titulo: "Configurar documentos",
+					nuevoNombre: "Documento",
+					conVisible: true,
+					avisoEliminar: "Se quitará el tipo de la configuración. Los documentos y sus carpetas se conservan.",
+					alRenombrar: (ant, nue) =>
+						renombrarTipoIncidencia(this.app, this.settings.carpetaAdmin, ant, nue),
+					secciones: [
+						{
+							id: "documentos",
+							titulo: "Documentos",
+							getLista: () => this.settings.documentos,
+						},
+					],
+				}).open();
+				break;
+			case "documento":
+				new CrearIncidenciaModal(this, {
+					titulo: "Crear documento",
+					singular: "documento",
+					tipos: () => this.settings.documentos,
+					accionConfig: "Configurar documentos",
+				}).open();
+				break;
+			case "editarDocumento":
+				new MoverIncidenciaModal(this, {
+					titulo: "Editar documento",
+					singular: "documento",
+					tipos: () => this.settings.documentos,
+					accionConfig: "Configurar documentos",
+				}).open();
+				break;
 		}
 	}
 
@@ -363,6 +432,10 @@ export default class GestorFuncionesPlugin extends Plugin {
 
 	async abrirTareasColaborador(): Promise<void> {
 		await this.abrirVistaEnPestana(VIEW_TYPE_COLABORADORES);
+	}
+
+	async abrirDocumentos(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_DOCUMENTOS);
 	}
 
 	/**
@@ -443,6 +516,7 @@ export default class GestorFuncionesPlugin extends Plugin {
 			data.incidencias === undefined
 				? INCIDENCIAS_DEFECTO.map((i) => ({ ...i }))
 				: data.incidencias.map(conVisible);
+		const documentos: Etiqueta[] = (data.documentos ?? []).map(conVisible);
 		const favoritos = (data.favoritos ?? []).map(String);
 		// Número de sprints configurable (mínimo 1, sin tope).
 		const numCrudo = Math.trunc(Number(data.numSprints));
@@ -462,6 +536,7 @@ export default class GestorFuncionesPlugin extends Plugin {
 			carriles,
 			colaboradores,
 			incidencias,
+			documentos,
 			numSprints,
 			favoritos,
 			ordenFunc: (data.ordenFunc ?? []).map(String),

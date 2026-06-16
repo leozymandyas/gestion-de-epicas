@@ -68,6 +68,17 @@ abstract class GestorModal extends Modal {
 		return { wrap, input, error };
 	}
 
+	/** Área de texto multilínea (p. ej. para la descripción que va al cuerpo). */
+	protected campoTextArea(label: string, placeholder: string): { wrap: HTMLElement; input: HTMLTextAreaElement } {
+		const wrap = this.contentEl.createDiv({ cls: "gf-campo" });
+		wrap.createEl("label", { text: label, cls: "gf-campo-label" });
+		const input = wrap.createEl("textarea", {
+			cls: "gf-campo-input gf-campo-textarea",
+			attr: { placeholder, rows: "4" },
+		});
+		return { wrap, input };
+	}
+
 	protected campoSelect(label: string, placeholder: string): CampoSelect {
 		const wrap = this.contentEl.createDiv({ cls: "gf-campo" });
 		wrap.createEl("label", { text: label, cls: "gf-campo-label" });
@@ -504,24 +515,39 @@ export class MoverHistoriaModal extends GestorModal {
 	}
 }
 
-/** Editar una incidencia: cambiar su tipo y/o moverla a otra épica/historia. */
+/** Editar una incidencia/documento: cambiar su tipo y/o moverla a otra
+ * épica/historia. */
 export class MoverIncidenciaModal extends GestorModal {
+	protected cfg: ConfigTipoNota;
+
+	constructor(plugin: GestorFuncionesPlugin, cfg?: Partial<ConfigTipoNota>) {
+		super(plugin);
+		this.cfg = {
+			titulo: "Editar incidencia",
+			singular: "incidencia",
+			tipos: () => plugin.settings.incidencias,
+			accionConfig: "Configurar incidencias",
+			...cfg,
+		};
+	}
+
 	onOpen(): void {
-		this.titleEl.setText("Editar incidencia");
+		this.titleEl.setText(this.cfg.titulo);
 		this.modalEl.addClass("gf-modal-sprints");
 		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
 
 		// --- Sección: seleccionar la incidencia ---
-		this.seccion("Incidencia a editar");
+		this.seccion(`${this.cfg.singular === "documento" ? "Documento" : "Incidencia"} a editar`);
 		const epica = this.campoEpica(funcs);
 		const fn = this.campoFuncionalidad(epica);
-		const incCampo = this.campoSelect("Incidencia", "Seleccionar incidencia");
+		const incCampo = this.campoSelect(
+			this.cfg.singular === "documento" ? "Documento" : "Incidencia",
+			"Seleccionar"
+		);
 		let incidencias: files.Incidencia[] = [];
 		const repoblarInc = () => {
 			const base = fn.getFn() ?? epica.getFunc();
-			incidencias = base
-				? files.listIncidencias(this.app, base, this.plugin.settings.incidencias)
-				: [];
+			incidencias = base ? files.listIncidencias(this.app, base, this.cfg.tipos()) : [];
 			this.setOpciones(
 				incCampo.select,
 				"Seleccionar incidencia",
@@ -544,9 +570,9 @@ export class MoverIncidenciaModal extends GestorModal {
 		this.setOpciones(
 			tipo.select,
 			"Seleccionar tipo",
-			this.plugin.settings.incidencias.map((i) => ({ value: i.nombre, label: i.nombre }))
+			this.cfg.tipos().map((i) => ({ value: i.nombre, label: i.nombre }))
 		);
-		// Al elegir incidencia, precarga su nombre y tipo actuales.
+		// Al elegir, precarga su nombre y tipo actuales.
 		incCampo.select.addEventListener("change", () => {
 			const i = incSel();
 			if (i) {
@@ -697,25 +723,51 @@ export class CrearTareaModal extends GestorModal {
 }
 
 /** Crear una incidencia de un tipo configurable (carpeta por tipo, como tareas). */
+/** Configura un modal de incidencia/documento: mismo comportamiento, distinto
+ * registro de tipos y textos (singular y título). */
+export interface ConfigTipoNota {
+	titulo: string;
+	singular: string;
+	tipos: () => Etiqueta[];
+	/** Acción de configuración a la que se remite si no hay tipos. */
+	accionConfig: string;
+}
+
 export class CrearIncidenciaModal extends GestorModal {
 	private duplicadoPendiente: string | null = null;
+	protected cfg: ConfigTipoNota;
+
+	constructor(plugin: GestorFuncionesPlugin, cfg?: Partial<ConfigTipoNota>) {
+		super(plugin);
+		this.cfg = {
+			titulo: "Crear incidencia",
+			singular: "incidencia",
+			tipos: () => plugin.settings.incidencias,
+			accionConfig: "Configurar incidencias",
+			...cfg,
+		};
+	}
 
 	onOpen(): void {
-		this.titleEl.setText("Crear incidencia");
+		this.titleEl.setText(this.cfg.titulo);
 		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
 		const func = this.campoEpica(funcs);
 		const fn = this.campoFuncionalidad(func);
 
-		const tipo = this.campoSelect("Tipo de incidencia", "Seleccionar tipo");
+		const tipo = this.campoSelect(`Tipo de ${this.cfg.singular}`, "Seleccionar tipo");
 		this.setOpciones(
 			tipo.select,
 			"Seleccionar tipo",
-			this.plugin.settings.incidencias.map((i) => ({ value: i.nombre, label: i.nombre }))
+			this.cfg.tipos().map((i) => ({ value: i.nombre, label: i.nombre }))
 		);
 
-		const nombre = this.campoTexto("Nombre de la incidencia", "Escribe nombre de la incidencia");
+		const nombre = this.campoTexto(`Nombre`, `Escribe el nombre`);
+		const descripcion = this.campoTextArea(
+			"Descripción",
+			"Aparece en el cuerpo de la nota (sección Descripción)"
+		);
 
-		// Colaboradores como chips (mismo selector que "Asignar etiquetas").
+		// Colaboradores como chips.
 		const colabSel = new Set<string>();
 		const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
 		colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
@@ -769,24 +821,25 @@ export class CrearIncidenciaModal extends GestorModal {
 					base,
 					valor,
 					tipoSlug,
-					tipoNombre
+					tipoNombre,
+					descripcion.input.value
 				);
 				await this.aplicarAsignados(file, [...colabSel]);
 				this.close();
 				await this.abrirNota(file);
 			} catch (e) {
 				console.error(e);
-				new Notice("Gestión de épicas: error al crear la incidencia.");
+				new Notice(`Gestión de épicas: error al crear ${this.cfg.singular === "documento" ? "el documento" : "la incidencia"}.`);
 			}
 		});
 
 		if (funcs.length === 0) {
 			this.sinEpicas(func);
 		}
-		if (this.plugin.settings.incidencias.length === 0) {
+		if (this.cfg.tipos().length === 0) {
 			tipo.wrap.createDiv({
 				cls: "gf-campo-aviso",
-				text: 'No hay tipos de incidencia. Créalos con "Configurar incidencias".',
+				text: `No hay tipos. Créalos con "${this.cfg.accionConfig}".`,
 			});
 		}
 	}
