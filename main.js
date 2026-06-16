@@ -5046,6 +5046,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       this.registerEvent(this.app.vault.on("create", refrescar));
       this.registerEvent(this.app.vault.on("delete", refrescar));
       this.registerEvent(this.app.vault.on("rename", refrescar));
+      this.registerEvent(this.app.metadataCache.on("changed", (file) => refrescar(file)));
       const s = this.plugin.settings;
       const sprint = (_b = (_a = s.sprintActual) == null ? void 0 : _a.sprint) != null ? _b : 1;
       this.desde = Math.min(Math.max(sprint, 1), s.numSprints || 1);
@@ -5448,7 +5449,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
         const a = li.createEl("a", { cls: "internal-link", text: inc.nombre });
         a.addEventListener("click", (e) => {
           e.preventDefault();
-          void this.app.workspace.getLeaf(false).openFile(inc.file);
+          void this.plugin.mostrarNota(inc.file);
         });
         if (this.cfg.agruparPor === "colaborador") {
           li.appendText(` \u2014 ${inc.contexto}`);
@@ -5460,7 +5461,6 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     await this.app.fileManager.processFrontMatter(file, (fm) => {
       fm.estado = estado;
     });
-    await this.recargar();
   }
   estadoDe(file) {
     var _a, _b;

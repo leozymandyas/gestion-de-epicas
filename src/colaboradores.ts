@@ -127,6 +127,9 @@ export class TareasColaboradorView extends ItemView {
 			this.registerEvent(this.app.vault.on("create", refrescar));
 			this.registerEvent(this.app.vault.on("delete", refrescar));
 			this.registerEvent(this.app.vault.on("rename", refrescar));
+			// Cambios de frontmatter (p. ej. marcar como hecha) → refrescar con la
+			// caché ya actualizada.
+			this.registerEvent(this.app.metadataCache.on("changed", (file) => refrescar(file)));
 			const s = this.plugin.settings;
 			const sprint = s.sprintActual?.sprint ?? 1;
 			this.desde = Math.min(Math.max(sprint, 1), s.numSprints || 1);
@@ -584,7 +587,8 @@ export class TareasColaboradorView extends ItemView {
 				const a = li.createEl("a", { cls: "internal-link", text: inc.nombre });
 				a.addEventListener("click", (e) => {
 					e.preventDefault();
-					void this.app.workspace.getLeaf(false).openFile(inc.file);
+					// Si la nota ya está abierta, va a esa pestaña en vez de duplicarla.
+					void this.plugin.mostrarNota(inc.file);
 				});
 				// En documentos el contexto ya es el título del grupo; en
 				// incidencias mostramos solo la épica/historia (sin el estado).
@@ -599,7 +603,8 @@ export class TareasColaboradorView extends ItemView {
 		await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
 			fm.estado = estado;
 		});
-		await this.recargar();
+		// No recargamos aquí: la caché de metadatos aún puede estar desfasada. El
+		// evento metadataCache "changed" dispara el refresco con el estado ya nuevo.
 	}
 
 	private estadoDe(file: TFile): string {
