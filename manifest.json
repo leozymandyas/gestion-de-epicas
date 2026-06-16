@@ -1,7 +1,7 @@
 {
 	"id": "gestion-de-epicas",
 	"name": "Gestion de epicas",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"minAppVersion": "1.7.2",
 	"description": "Concentra toda la información de una épica de producto en un solo lugar: tareas, pendientes, sprints y roadmap como notas Markdown dentro del vault.",
 	"author": "Leonardo Ruano",

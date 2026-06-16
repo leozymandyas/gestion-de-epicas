@@ -196,7 +196,7 @@ export class OrganizarDocumentosView extends ItemView {
 		});
 
 		if (this.epicaActual()) {
-			const agregar = barra.createEl("button", { text: "Agregar carril", cls: "gf-roadmap-recargar" });
+			const agregar = barra.createEl("button", { text: "Agregar segmento", cls: "gf-roadmap-recargar" });
 			agregar.addEventListener("click", () => this.agregarCarril());
 		}
 
@@ -245,11 +245,11 @@ export class OrganizarDocumentosView extends ItemView {
 			const acciones = header.createDiv({ cls: "gf-orgdocs-carril-acciones" });
 			const renombrar = acciones.createEl("button", { cls: "gf-orgdocs-icono-btn" });
 			setIcon(renombrar, "pencil");
-			renombrar.setAttr("aria-label", "Renombrar carril");
+			renombrar.setAttr("aria-label", "Renombrar segmento");
 			renombrar.addEventListener("click", () => this.renombrarCarril(carril));
 			const eliminar = acciones.createEl("button", { cls: "gf-orgdocs-icono-btn" });
 			setIcon(eliminar, "trash-2");
-			eliminar.setAttr("aria-label", "Eliminar carril");
+			eliminar.setAttr("aria-label", "Eliminar segmento");
 			eliminar.addEventListener("click", () => this.eliminarCarril(carril));
 		}
 
@@ -336,7 +336,7 @@ export class OrganizarDocumentosView extends ItemView {
 	// ----- Carriles -----
 
 	private agregarCarril(): void {
-		new NombreCarrilModal(this.plugin, "Nuevo carril", "", (nombre) => {
+		new NombreCarrilModal(this.plugin, "Nuevo segmento", "", (nombre) => {
 			const d = this.datosEditable();
 			d.carriles.push({ id: nuevoId(), nombre });
 			void this.plugin.saveSettings();
@@ -345,7 +345,7 @@ export class OrganizarDocumentosView extends ItemView {
 	}
 
 	private renombrarCarril(carril: DocCarril): void {
-		new NombreCarrilModal(this.plugin, "Renombrar carril", carril.nombre, (nombre) => {
+		new NombreCarrilModal(this.plugin, "Renombrar segmento", carril.nombre, (nombre) => {
 			const d = this.datosEditable();
 			const c = d.carriles.find((x) => x.id === carril.id);
 			if (c) c.nombre = nombre;
@@ -405,7 +405,7 @@ class NombreCarrilModal extends Modal {
 			cls: "gf-orgdocs-nombre-input",
 			value: this.valor,
 		});
-		input.placeholder = "Nombre del carril";
+		input.placeholder = "Nombre del segmento";
 		const guardar = () => {
 			const nombre = input.value.trim();
 			if (!nombre) return;

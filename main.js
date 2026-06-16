@@ -2294,7 +2294,6 @@ var REGISTRO = [
   { id: "crear-funcionalidad", icono: "puzzle", texto: "Crear historia", accion: (p) => p.abrirModal("crearfn") },
   { id: "asignar-sprint", icono: "calendar-days", texto: "Asignar sprint", accion: (p) => p.abrirModal("sprint") },
   { id: "asignar-etiquetas", icono: "tag", texto: "Etiquetas de historias", accion: (p) => void p.abrirEtiquetarHistorias() },
-  { id: "editar-nombre", icono: "pencil", texto: "Editar nombre", accion: (p) => p.abrirModal("editarNombre") },
   { id: "mover-historia", icono: "folder-tree", texto: "Historias por \xE9pica", accion: (p) => void p.abrirHistorias() },
   { id: "mover-historias-tablero", icono: "folder-symlink", texto: "Mover historias", accion: (p) => void p.abrirMoverHistorias() },
   { id: "archivar-epica", icono: "archive", texto: "Archivar \xE9picas", accion: (p) => p.abrirModal("mover") },
@@ -2327,7 +2326,7 @@ var SECCIONES_PANEL = [
   { id: "epicas-sprints", titulo: "Sprints y roadmap", acciones: ["asignar-sprint", "roadmap", "gestor-funcionalidades"] },
   { id: "epicas-historias", titulo: "Historias", acciones: ["mover-historia", "mover-historias-tablero", "asignar-etiquetas"] },
   { id: "epicas-colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
-  { id: "epicas-acciones", titulo: "Acciones", acciones: ["editar-nombre", "archivar-epica", "eliminar-epica-historia"] },
+  { id: "epicas-acciones", titulo: "Acciones", acciones: ["archivar-epica", "eliminar-epica-historia"] },
   // Pestaña Incidencias.
   { id: "inc-crear", titulo: "Crear", acciones: ["crear-incidencia"] },
   { id: "inc-tableros", titulo: "Tableros", acciones: ["incidencias-por-colaborador", "mover-incidencias", "reclasificar-incidencias"] },
@@ -2904,76 +2903,6 @@ var CrearFuncionalidadModal = class extends GestorModal {
       }
     });
     nombre.input.focus();
-  }
-};
-var EditarNombreModal = class extends GestorModal {
-  onOpen() {
-    this.titleEl.setText("Editar nombre");
-    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
-    const epica = this.campoEpica(funcs);
-    const fn = this.campoFuncionalidad(epica);
-    const incCampo = this.campoSelect("Incidencia (opcional)", "Toda la \xE9pica/historia");
-    let incidencias = [];
-    const repoblarInc = () => {
-      var _a;
-      const base = (_a = fn.getFn()) != null ? _a : epica.getFunc();
-      incidencias = base ? listIncidencias(this.app, base, this.plugin.settings.incidencias) : [];
-      this.setOpciones(
-        incCampo.select,
-        "Toda la \xE9pica/historia",
-        incidencias.map((i, idx) => ({ value: String(idx), label: `${i.tipoNombre}: ${i.nombre}` }))
-      );
-      incCampo.select.dispatchEvent(new Event("change"));
-    };
-    const nombre = this.campoTexto("Nuevo nombre", "Escribe el nuevo nombre");
-    const incSeleccionada = () => {
-      var _a;
-      const v = incCampo.select.value;
-      return v === "" ? null : (_a = incidencias[Number(v)]) != null ? _a : null;
-    };
-    const sincronizar = () => {
-      var _a;
-      const inc = incSeleccionada();
-      if (inc) {
-        nombre.input.value = inc.nombre;
-        return;
-      }
-      const o = (_a = fn.getFn()) != null ? _a : epica.getFunc();
-      nombre.input.value = o ? o.nombre : "";
-    };
-    epica.select.addEventListener("change", repoblarInc);
-    fn.select.addEventListener("change", repoblarInc);
-    incCampo.select.addEventListener("change", sincronizar);
-    repoblarInc();
-    this.botones(async () => {
-      var _a, _b;
-      this.limpiarError(epica);
-      this.limpiarError(nombre);
-      const inc = incSeleccionada();
-      const o = (_b = (_a = fn.getFn()) != null ? _a : epica.getFunc()) != null ? _b : null;
-      const valor = nombre.input.value.trim();
-      if (!o) {
-        this.mostrarError(epica, MSG_OBLIGATORIO);
-        return;
-      }
-      if (!valor) {
-        this.mostrarError(nombre, "El nombre es obligatorio.");
-        return;
-      }
-      try {
-        if (inc)
-          await renombrarIncidencia(this.app, inc.file, valor);
-        else
-          await renombrarFuncionalidad(this.app, o, valor);
-        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: nombre actualizado.");
-        this.close();
-      } catch (e) {
-        console.error(e);
-        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: no se pudo renombrar.");
-      }
-    }, "Guardar");
-    if (funcs.length === 0)
-      this.sinEpicas(epica);
   }
 };
 var CrearTareaModal = class extends GestorModal {
@@ -6015,7 +5944,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       this.recargar();
     });
     if (this.epicaActual()) {
-      const agregar = barra.createEl("button", { text: "Agregar carril", cls: "gf-roadmap-recargar" });
+      const agregar = barra.createEl("button", { text: "Agregar segmento", cls: "gf-roadmap-recargar" });
       agregar.addEventListener("click", () => this.agregarCarril());
     }
     const recargar = barra.createEl("button", { text: "Recargar", cls: "gf-roadmap-recargar" });
@@ -6058,11 +5987,11 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       const acciones = header.createDiv({ cls: "gf-orgdocs-carril-acciones" });
       const renombrar = acciones.createEl("button", { cls: "gf-orgdocs-icono-btn" });
       (0, import_obsidian14.setIcon)(renombrar, "pencil");
-      renombrar.setAttr("aria-label", "Renombrar carril");
+      renombrar.setAttr("aria-label", "Renombrar segmento");
       renombrar.addEventListener("click", () => this.renombrarCarril(carril));
       const eliminar = acciones.createEl("button", { cls: "gf-orgdocs-icono-btn" });
       (0, import_obsidian14.setIcon)(eliminar, "trash-2");
-      eliminar.setAttr("aria-label", "Eliminar carril");
+      eliminar.setAttr("aria-label", "Eliminar segmento");
       eliminar.addEventListener("click", () => this.eliminarCarril(carril));
     }
     const cuerpo = colEl.createDiv({ cls: "gf-orgdocs-cuerpo" });
@@ -6147,7 +6076,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
   }
   // ----- Carriles -----
   agregarCarril() {
-    new NombreCarrilModal(this.plugin, "Nuevo carril", "", (nombre) => {
+    new NombreCarrilModal(this.plugin, "Nuevo segmento", "", (nombre) => {
       const d = this.datosEditable();
       d.carriles.push({ id: nuevoId(), nombre });
       void this.plugin.saveSettings();
@@ -6155,7 +6084,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     }).open();
   }
   renombrarCarril(carril) {
-    new NombreCarrilModal(this.plugin, "Renombrar carril", carril.nombre, (nombre) => {
+    new NombreCarrilModal(this.plugin, "Renombrar segmento", carril.nombre, (nombre) => {
       const d = this.datosEditable();
       const c = d.carriles.find((x) => x.id === carril.id);
       if (c)
@@ -6203,7 +6132,7 @@ var NombreCarrilModal = class extends import_obsidian14.Modal {
       cls: "gf-orgdocs-nombre-input",
       value: this.valor
     });
-    input.placeholder = "Nombre del carril";
+    input.placeholder = "Nombre del segmento";
     const guardar = () => {
       const nombre = input.value.trim();
       if (!nombre)
@@ -7689,11 +7618,6 @@ var GestorFuncionesPlugin = class extends import_obsidian21.Plugin {
       callback: () => this.abrirModal("sprint")
     });
     this.addCommand({
-      id: "editar-nombre",
-      name: "Editar nombre de \xE9pica o historia",
-      callback: () => this.abrirModal("editarNombre")
-    });
-    this.addCommand({
       id: "mover-historia",
       name: "Historias",
       callback: () => void this.abrirHistorias()
@@ -7855,9 +7779,6 @@ var GestorFuncionesPlugin = class extends import_obsidian21.Plugin {
         break;
       case "incidencia":
         new CrearIncidenciaModal(this).open();
-        break;
-      case "editarNombre":
-        new EditarNombreModal(this).open();
         break;
       case "configDocumentos":
         new GestorEtiquetasModal(this, {

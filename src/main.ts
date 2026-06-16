@@ -57,7 +57,6 @@ import {
 	CrearIncidenciaModal,
 	CrearPendienteModal,
 	CrearTareaModal,
-	EditarNombreModal,
 	EliminarEpicaHistoriaModal,
 	MoverEpicaModal,
 } from "./modals";
@@ -75,7 +74,6 @@ export type TipoModal =
 	| "colaboradores"
 	| "configIncidencias"
 	| "incidencia"
-	| "editarNombre"
 	| "configDocumentos"
 	| "documento"
 	| "eliminarEpicaHistoria";
@@ -214,11 +212,6 @@ export default class GestorFuncionesPlugin extends Plugin {
 			id: "asignar-sprints",
 			name: "Asignar sprint",
 			callback: () => this.abrirModal("sprint"),
-		});
-		this.addCommand({
-			id: "editar-nombre",
-			name: "Editar nombre de épica o historia",
-			callback: () => this.abrirModal("editarNombre"),
 		});
 		this.addCommand({
 			id: "mover-historia",
@@ -385,9 +378,6 @@ export default class GestorFuncionesPlugin extends Plugin {
 				break;
 			case "incidencia":
 				new CrearIncidenciaModal(this).open();
-				break;
-			case "editarNombre":
-				new EditarNombreModal(this).open();
 				break;
 			case "configDocumentos":
 				new GestorEtiquetasModal(this, {

@@ -42,7 +42,7 @@
    por igual para abarcar todo el ancho disponible (sin quedar centradas). */
 .gf-tabs {
 	display: flex;
-	gap: 2px;
+	gap: 6px;
 	padding: 3px;
 	border-radius: 12px;
 	background: var(--background-modifier-hover);
@@ -90,10 +90,17 @@
 	align-items: center;
 }
 
+/* Salvaguarda: si el texto no cabe, se recorta en vez de encimarse. */
+.gf-tab-texto {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* Panel estrecho: ocultar el texto y dejar solo los iconos, repartidos a lo
-   ancho para que quepan sin scroll lateral. El umbral es bajo para que el texto
-   reaparezca en cuanto hay espacio suficiente. */
-@container (max-width: 250px) {
+   ancho para que quepan sin amontonarse. El umbral cubre las cuatro pestañas;
+   el texto reaparece cuando el panel es lo bastante ancho. */
+@container (max-width: 330px) {
 	.gf-tabs .gf-tab-texto {
 		display: none;
 	}
