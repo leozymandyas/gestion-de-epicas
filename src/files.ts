@@ -1004,3 +1004,97 @@ export async function moverIncidencia(
 		`- [ ] [[${base}|${nombreFinal}]]`
 	);
 }
+
+// ===== Eliminar y archivar =====
+
+/** Todas las notas .md descendientes de una carpeta (recursivo). */
+function notasDescendientes(folder: TFolder): TFile[] {
+	const out: TFile[] = [];
+	const recorrer = (f: TFolder) => {
+		for (const c of f.children) {
+			if (c instanceof TFolder) recorrer(c);
+			else if (c instanceof TFile && c.extension === "md") out.push(c);
+		}
+	};
+	recorrer(folder);
+	return out;
+}
+
+/** Reemplaza los enlaces `[[oldSlug]]` y `[[oldSlug|alias]]` por el nuevo slug. */
+function reemplazarEnlace(content: string, oldSlug: string, newSlug: string): string {
+	return content
+		.split(`[[${oldSlug}]]`)
+		.join(`[[${newSlug}]]`)
+		.split(`[[${oldSlug}|`)
+		.join(`[[${newSlug}|`);
+}
+
+/**
+ * Elimina una épica o historia: manda su carpeta (con TODO su contenido:
+ * historias, incidencias, documentos y notas) a la papelera según los ajustes de
+ * borrado de Obsidian.
+ */
+export async function eliminarFuncionalidad(app: App, ref: FuncRef): Promise<void> {
+	await app.fileManager.trashFile(ref.folder);
+}
+
+/**
+ * Elimina una incidencia o documento: quita su enlace del índice de la nota
+ * principal de origen y manda su .md a la papelera.
+ */
+export async function eliminarIncidencia(
+	app: App,
+	incFile: TFile,
+	origen: FuncRef
+): Promise<void> {
+	await quitarLineaConEnlace(app, origen.file, incFile.basename);
+	await app.fileManager.trashFile(incFile);
+}
+
+/**
+ * Archiva una épica moviéndola a la carpeta de archivadas. Si ya existe una
+ * archivada con el mismo slug, renombra la que se archiva agregándole el año
+ * (actualizando su nombre/H1 y los enlaces `[[slug]]` de todos sus elementos
+ * hijos: historias, incidencias, documentos y sprints) antes de moverla.
+ * Devuelve si hubo renombrado y el nombre final.
+ */
+export async function archivarEpica(
+	app: App,
+	epica: FuncRef,
+	anio: number
+): Promise<{ renombrada: boolean; nombre: string }> {
+	const destino = CARPETA_INACTIVAS;
+	await ensureFolder(app, destino);
+
+	// Sin conflicto: se mueve tal cual.
+	if (!app.vault.getAbstractFileByPath(normalizePath(`${destino}/${epica.slug}`))) {
+		await app.fileManager.renameFile(epica.folder, normalizePath(`${destino}/${epica.slug}`));
+		return { renombrada: false, nombre: epica.nombre };
+	}
+
+	// Conflicto: renombrar con el año y un slug libre en la carpeta destino.
+	const nuevoNombre = `${epica.nombre} ${anio}`;
+	const newSlug = slugCarpetaLibre(app, destino, slugify(nuevoNombre) || epica.slug);
+
+	// 1) Nombre y H1 de la nota principal.
+	await app.fileManager.processFrontMatter(epica.file, (fm: Record<string, unknown>) => {
+		fm.nombre = nuevoNombre;
+	});
+	await actualizarH1(app, epica.file, nuevoNombre);
+
+	// 2) Actualiza los enlaces a la épica en todos sus elementos hijos.
+	for (const f of notasDescendientes(epica.folder)) {
+		await app.vault.process(f, (c) => reemplazarEnlace(c, epica.slug, newSlug));
+	}
+
+	// 3) Renombra la nota principal (slug) dentro de su carpeta actual.
+	await app.fileManager.renameFile(
+		epica.file,
+		normalizePath(`${epica.folder.path}/${newSlug}.md`)
+	);
+
+	// 4) Mueve y renombra la carpeta a la de archivadas.
+	await app.fileManager.renameFile(epica.folder, normalizePath(`${destino}/${newSlug}`));
+
+	return { renombrada: true, nombre: nuevoNombre };
+}

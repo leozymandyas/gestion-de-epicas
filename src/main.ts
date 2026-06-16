@@ -55,6 +55,8 @@ import {
 	CrearPendienteModal,
 	CrearTareaModal,
 	EditarNombreModal,
+	EliminarEpicaHistoriaModal,
+	EliminarIncidenciaModal,
 	MoverEpicaModal,
 	MoverHistoriaModal,
 	MoverIncidenciaModal,
@@ -79,7 +81,10 @@ export type TipoModal =
 	| "editarIncidencia"
 	| "configDocumentos"
 	| "documento"
-	| "editarDocumento";
+	| "editarDocumento"
+	| "eliminarEpicaHistoria"
+	| "eliminarIncidencia"
+	| "eliminarDocumento";
 
 /** Sanea el mapa de organización por carriles de "Organizar documentos". */
 function sanearOrganizacionDocs(valor: unknown): Record<string, OrganizacionDocsEpica> {
@@ -256,6 +261,21 @@ export default class GestorFuncionesPlugin extends Plugin {
 			callback: () => this.abrirModal("mover"),
 		});
 		this.addCommand({
+			id: "eliminar-epica-historia",
+			name: "Eliminar épica o historia",
+			callback: () => this.abrirModal("eliminarEpicaHistoria"),
+		});
+		this.addCommand({
+			id: "eliminar-incidencia",
+			name: "Eliminar incidencia",
+			callback: () => this.abrirModal("eliminarIncidencia"),
+		});
+		this.addCommand({
+			id: "eliminar-documento",
+			name: "Eliminar documento",
+			callback: () => this.abrirModal("eliminarDocumento"),
+		});
+		this.addCommand({
 			id: "asignar-colaborador",
 			name: "Asignar colaborador",
 			callback: () => this.abrirModal("asignar"),
@@ -417,6 +437,20 @@ export default class GestorFuncionesPlugin extends Plugin {
 			case "editarDocumento":
 				new MoverIncidenciaModal(this, {
 					titulo: "Editar documento",
+					singular: "documento",
+					tipos: () => this.settings.documentos,
+					accionConfig: "Configurar documentos",
+				}).open();
+				break;
+			case "eliminarEpicaHistoria":
+				new EliminarEpicaHistoriaModal(this).open();
+				break;
+			case "eliminarIncidencia":
+				new EliminarIncidenciaModal(this).open();
+				break;
+			case "eliminarDocumento":
+				new EliminarIncidenciaModal(this, {
+					titulo: "Eliminar documento",
 					singular: "documento",
 					tipos: () => this.settings.documentos,
 					accionConfig: "Configurar documentos",

@@ -1476,15 +1476,31 @@ export class MoverEpicaModal extends GestorModal {
 			for (const ep of this.todas) {
 				const quiere = this.estados.get(ep.ref.folder.path) ?? ep.archivada;
 				if (quiere === ep.archivada) continue;
-				const destino = quiere ? files.CARPETA_INACTIVAS : files.CARPETA_ACTIVAS;
-				const ruta = `${destino}/${ep.ref.slug}`;
-				if (this.app.vault.getAbstractFileByPath(ruta)) {
-					new Notice(`Gestión de épicas: ya existe "${ep.ref.nombre}" en la carpeta destino.`);
-					continue;
-				}
 				try {
-					await this.app.fileManager.renameFile(ep.ref.folder, ruta);
-					movidas++;
+					if (quiere) {
+						// Archivar: si ya hay una archivada con el mismo nombre, se
+						// renombra esta agregándole el año (y se actualizan sus hijos).
+						const res = await files.archivarEpica(
+							this.app,
+							ep.ref,
+							new Date().getFullYear()
+						);
+						if (res.renombrada) {
+							new Notice(
+								`Gestión de épicas: ya existía "${ep.ref.nombre}" archivada; se archivó como "${res.nombre}".`
+							);
+						}
+						movidas++;
+					} else {
+						// Desarchivar: si hay conflicto en activas, se omite con aviso.
+						const ruta = `${files.CARPETA_ACTIVAS}/${ep.ref.slug}`;
+						if (this.app.vault.getAbstractFileByPath(ruta)) {
+							new Notice(`Gestión de épicas: ya existe "${ep.ref.nombre}" en épicas activas.`);
+							continue;
+						}
+						await this.app.fileManager.renameFile(ep.ref.folder, ruta);
+						movidas++;
+					}
 				} catch (e) {
 					console.error(e);
 					new Notice(`Gestión de épicas: no se pudo mover "${ep.ref.nombre}".`);
@@ -1891,5 +1907,160 @@ export class CrearFuncionalidadNuevaModal extends GestorModal {
 		if (funcs.length === 0) {
 			this.sinEpicas(epica);
 		}
+	}
+}
+
+/** Confirmación destructiva (botón primario en rojo). Si se cierra con Escape o
+ * la X, no ejecuta la acción. */
+export class ConfirmacionModal extends Modal {
+	constructor(
+		private plugin: GestorFuncionesPlugin,
+		private titulo: string,
+		private mensaje: string,
+		private textoOk: string,
+		private onOk: () => void | Promise<void>
+	) {
+		super(plugin.app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(this.titulo);
+		this.contentEl.createEl("p", { cls: "gf-campo-aviso", text: this.mensaje });
+		const row = this.contentEl.createDiv({ cls: "gf-botones" });
+		const cancelar = row.createEl("button", { text: "Cancelar" });
+		cancelar.addEventListener("click", () => this.close());
+		const ok = row.createEl("button", { text: this.textoOk, cls: "mod-warning" });
+		ok.addEventListener("click", () => {
+			this.close();
+			void this.onOk();
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/** Eliminar una épica o historia (con su contenido), con confirmación. */
+export class EliminarEpicaHistoriaModal extends GestorModal {
+	onOpen(): void {
+		this.titleEl.setText("Eliminar épica o historia");
+		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+		const epica = this.campoEpica(funcs);
+		const fn = this.campoFuncionalidad(epica);
+
+		this.contentEl.createDiv({
+			cls: "gf-campo-aviso",
+			text: "Si eliges solo la épica se elimina toda la épica. Si eliges una historia, se elimina solo esa historia.",
+		});
+
+		this.botones(() => {
+			this.limpiarError(epica);
+			const objetivo = fn.getFn() ?? epica.getFunc() ?? null;
+			if (!objetivo) {
+				this.mostrarError(epica, MSG_OBLIGATORIO);
+				return;
+			}
+			const esHistoria = fn.getFn() !== null;
+			const tipo = esHistoria ? "la historia" : "la épica";
+			new ConfirmacionModal(
+				this.plugin,
+				`Eliminar ${tipo}`,
+				`Se enviará ${tipo} "${objetivo.nombre}" y TODO su contenido (${
+					esHistoria
+						? "incidencias, documentos y notas"
+						: "historias, incidencias, documentos y notas"
+				}) a la papelera de Obsidian. ¿Continuar?`,
+				"Eliminar",
+				async () => {
+					try {
+						await files.eliminarFuncionalidad(this.app, objetivo);
+						new Notice(`Gestión de épicas: "${objetivo.nombre}" eliminada.`);
+						this.close();
+					} catch (e) {
+						console.error(e);
+						new Notice("Gestión de épicas: no se pudo eliminar.");
+					}
+				}
+			).open();
+		}, "Eliminar…");
+
+		if (funcs.length === 0) this.sinEpicas(epica);
+	}
+}
+
+/** Eliminar una incidencia o documento, con confirmación. Parametrizable para
+ * ambos subsistemas (incidencias y documentos). */
+export class EliminarIncidenciaModal extends GestorModal {
+	protected cfg: ConfigTipoNota;
+
+	constructor(plugin: GestorFuncionesPlugin, cfg?: Partial<ConfigTipoNota>) {
+		super(plugin);
+		this.cfg = {
+			titulo: "Eliminar incidencia",
+			singular: "incidencia",
+			tipos: () => plugin.settings.incidencias,
+			accionConfig: "Configurar incidencias",
+			conColaboradores: false,
+			...cfg,
+		};
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(this.cfg.titulo);
+		const esDoc = this.cfg.singular === "documento";
+		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+		const epica = this.campoEpica(funcs);
+		const fn = this.campoFuncionalidad(epica);
+		const incCampo = this.campoSelect(esDoc ? "Documento" : "Incidencia", "Seleccionar");
+
+		let incidencias: files.Incidencia[] = [];
+		const repoblarInc = () => {
+			const base = fn.getFn() ?? epica.getFunc();
+			incidencias = base ? files.listIncidencias(this.app, base, this.cfg.tipos()) : [];
+			this.setOpciones(
+				incCampo.select,
+				"Seleccionar",
+				incidencias.map((i, idx) => ({ value: String(idx), label: `${i.tipoNombre}: ${i.nombre}` }))
+			);
+			incCampo.select.dispatchEvent(new Event("change"));
+		};
+		epica.select.addEventListener("change", repoblarInc);
+		fn.select.addEventListener("change", repoblarInc);
+		repoblarInc();
+
+		const incSel = (): files.Incidencia | null => {
+			const v = incCampo.select.value;
+			return v === "" ? null : incidencias[Number(v)] ?? null;
+		};
+
+		this.botones(() => {
+			this.limpiarError(incCampo);
+			const i = incSel();
+			const origen = fn.getFn() ?? epica.getFunc() ?? null;
+			if (!i || !origen) {
+				this.mostrarError(incCampo, `Selecciona ${esDoc ? "el documento" : "la incidencia"}.`);
+				return;
+			}
+			const tipo = esDoc ? "el documento" : "la incidencia";
+			new ConfirmacionModal(
+				this.plugin,
+				`Eliminar ${esDoc ? "documento" : "incidencia"}`,
+				`Se enviará ${tipo} "${i.nombre}" a la papelera de Obsidian y se quitará del índice de su nota. ¿Continuar?`,
+				"Eliminar",
+				async () => {
+					try {
+						await files.eliminarIncidencia(this.app, i.file, origen);
+						new Notice(`Gestión de épicas: "${i.nombre}" eliminado.`);
+						this.close();
+					} catch (e) {
+						console.error(e);
+						new Notice("Gestión de épicas: no se pudo eliminar.");
+					}
+				}
+			).open();
+		}, "Eliminar…");
+
+		if (funcs.length === 0) this.sinEpicas(epica);
 	}
 }

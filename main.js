@@ -871,6 +871,52 @@ async function moverIncidencia(app, incFile, origen, destino, nuevoTipoNombre, n
     `- [ ] [[${base}|${nombreFinal}]]`
   );
 }
+function notasDescendientes(folder) {
+  const out = [];
+  const recorrer = (f) => {
+    for (const c of f.children) {
+      if (c instanceof import_obsidian.TFolder)
+        recorrer(c);
+      else if (c instanceof import_obsidian.TFile && c.extension === "md")
+        out.push(c);
+    }
+  };
+  recorrer(folder);
+  return out;
+}
+function reemplazarEnlace(content, oldSlug, newSlug) {
+  return content.split(`[[${oldSlug}]]`).join(`[[${newSlug}]]`).split(`[[${oldSlug}|`).join(`[[${newSlug}|`);
+}
+async function eliminarFuncionalidad(app, ref) {
+  await app.fileManager.trashFile(ref.folder);
+}
+async function eliminarIncidencia(app, incFile, origen) {
+  await quitarLineaConEnlace(app, origen.file, incFile.basename);
+  await app.fileManager.trashFile(incFile);
+}
+async function archivarEpica(app, epica, anio) {
+  const destino = CARPETA_INACTIVAS;
+  await ensureFolder(app, destino);
+  if (!app.vault.getAbstractFileByPath((0, import_obsidian.normalizePath)(`${destino}/${epica.slug}`))) {
+    await app.fileManager.renameFile(epica.folder, (0, import_obsidian.normalizePath)(`${destino}/${epica.slug}`));
+    return { renombrada: false, nombre: epica.nombre };
+  }
+  const nuevoNombre = `${epica.nombre} ${anio}`;
+  const newSlug = slugCarpetaLibre(app, destino, slugify(nuevoNombre) || epica.slug);
+  await app.fileManager.processFrontMatter(epica.file, (fm) => {
+    fm.nombre = nuevoNombre;
+  });
+  await actualizarH1(app, epica.file, nuevoNombre);
+  for (const f of notasDescendientes(epica.folder)) {
+    await app.vault.process(f, (c) => reemplazarEnlace(c, epica.slug, newSlug));
+  }
+  await app.fileManager.renameFile(
+    epica.file,
+    (0, import_obsidian.normalizePath)(`${epica.folder.path}/${newSlug}.md`)
+  );
+  await app.fileManager.renameFile(epica.folder, (0, import_obsidian.normalizePath)(`${destino}/${newSlug}`));
+  return { renombrada: true, nombre: nuevoNombre };
+}
 
 // src/config-io.ts
 var import_obsidian2 = require("obsidian");
@@ -2154,6 +2200,7 @@ var REGISTRO = [
   { id: "editar-nombre", icono: "pencil", texto: "Editar nombre", accion: (p) => p.abrirModal("editarNombre") },
   { id: "mover-historia", icono: "folder-symlink", texto: "Mover historia", accion: (p) => p.abrirModal("moverHistoria") },
   { id: "archivar-epica", icono: "archive", texto: "Archivar \xE9picas", accion: (p) => p.abrirModal("mover") },
+  { id: "eliminar-epica-historia", icono: "trash-2", texto: "Eliminar \xE9pica o historia", accion: (p) => p.abrirModal("eliminarEpicaHistoria") },
   // Épicas — tableros
   { id: "roadmap", icono: "map", texto: "Roadmap", accion: (p) => void p.abrirRoadmap() },
   { id: "gestor-funcionalidades", icono: "kanban-square", texto: "Gesti\xF3n de historias", accion: (p) => void p.abrirGestorFuncionalidades() },
@@ -2161,10 +2208,12 @@ var REGISTRO = [
   { id: "configurar-incidencias", icono: "settings-2", texto: "Configurar incidencias", accion: (p) => p.abrirModal("configIncidencias") },
   { id: "crear-incidencia", icono: "circle-dot", texto: "Crear incidencia", accion: (p) => p.abrirModal("incidencia") },
   { id: "editar-incidencia", icono: "replace", texto: "Editar incidencia", accion: (p) => p.abrirModal("editarIncidencia") },
+  { id: "eliminar-incidencia", icono: "trash-2", texto: "Eliminar incidencia", accion: (p) => p.abrirModal("eliminarIncidencia") },
   // Documentos
   { id: "configurar-documentos", icono: "settings-2", texto: "Configurar documentos", accion: (p) => p.abrirModal("configDocumentos") },
   { id: "crear-documento", icono: "file-plus", texto: "Crear documento", accion: (p) => p.abrirModal("documento") },
   { id: "editar-documento", icono: "replace", texto: "Editar documento", accion: (p) => p.abrirModal("editarDocumento") },
+  { id: "eliminar-documento", icono: "trash-2", texto: "Eliminar documento", accion: (p) => p.abrirModal("eliminarDocumento") },
   { id: "documentos", icono: "file-text", texto: "Documentos", accion: (p) => void p.abrirDocumentos() },
   { id: "organizar-documentos", icono: "layout-grid", texto: "Organizar documentos", accion: (p) => void p.abrirOrganizarDocumentos() },
   // Colaboradores
@@ -2177,16 +2226,18 @@ var REGISTRO = [
 ];
 var POR_ID = new Map(REGISTRO.map((a) => [a.id, a]));
 var SECCIONES_PANEL = [
-  { id: "epicas-admin", titulo: "Administraci\xF3n", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas", "editar-nombre", "mover-historia", "archivar-epica"] },
+  { id: "epicas-admin", titulo: "Administraci\xF3n", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas"] },
+  { id: "epicas-acciones", titulo: "Acciones", acciones: ["editar-nombre", "mover-historia", "archivar-epica", "eliminar-epica-historia"] },
   { id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
-  { id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia", "editar-incidencia"] },
-  { id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador", "incidencias-por-colaborador"] },
-  { id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "editar-documento", "documentos", "organizar-documentos"] }
+  { id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia"] },
+  { id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "documentos", "organizar-documentos"] },
+  { id: "incidencias-acciones", titulo: "Acciones", acciones: ["editar-incidencia", "eliminar-incidencia", "editar-documento", "eliminar-documento"] },
+  { id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador", "incidencias-por-colaborador"] }
 ];
 var TABS = [
   { id: "favoritos", titulo: "Favoritos", secciones: [] },
-  { id: "epicas", titulo: "\xC9picas", secciones: ["epicas-admin", "epicas-tableros"] },
-  { id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "colaboradores", "documentos"] }
+  { id: "epicas", titulo: "\xC9picas", secciones: ["epicas-admin", "epicas-acciones", "epicas-tableros"] },
+  { id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "documentos", "incidencias-acciones", "colaboradores"] }
 ];
 function resolverAccion(_plugin, id) {
   var _a;
@@ -3705,15 +3756,28 @@ var MoverEpicaModal = class extends GestorModal {
         const quiere = (_a = this.estados.get(ep.ref.folder.path)) != null ? _a : ep.archivada;
         if (quiere === ep.archivada)
           continue;
-        const destino = quiere ? CARPETA_INACTIVAS : CARPETA_ACTIVAS;
-        const ruta = `${destino}/${ep.ref.slug}`;
-        if (this.app.vault.getAbstractFileByPath(ruta)) {
-          new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: ya existe "${ep.ref.nombre}" en la carpeta destino.`);
-          continue;
-        }
         try {
-          await this.app.fileManager.renameFile(ep.ref.folder, ruta);
-          movidas++;
+          if (quiere) {
+            const res = await archivarEpica(
+              this.app,
+              ep.ref,
+              (/* @__PURE__ */ new Date()).getFullYear()
+            );
+            if (res.renombrada) {
+              new import_obsidian8.Notice(
+                `Gesti\xF3n de \xE9picas: ya exist\xEDa "${ep.ref.nombre}" archivada; se archiv\xF3 como "${res.nombre}".`
+              );
+            }
+            movidas++;
+          } else {
+            const ruta = `${CARPETA_ACTIVAS}/${ep.ref.slug}`;
+            if (this.app.vault.getAbstractFileByPath(ruta)) {
+              new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: ya existe "${ep.ref.nombre}" en \xE9picas activas.`);
+              continue;
+            }
+            await this.app.fileManager.renameFile(ep.ref.folder, ruta);
+            movidas++;
+          }
         } catch (e) {
           console.error(e);
           new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: no se pudo mover "${ep.ref.nombre}".`);
@@ -4094,6 +4158,142 @@ var CrearFuncionalidadNuevaModal = class extends GestorModal {
     if (funcs.length === 0) {
       this.sinEpicas(epica);
     }
+  }
+};
+var ConfirmacionModal = class extends import_obsidian8.Modal {
+  constructor(plugin, titulo, mensaje, textoOk, onOk) {
+    super(plugin.app);
+    this.plugin = plugin;
+    this.titulo = titulo;
+    this.mensaje = mensaje;
+    this.textoOk = textoOk;
+    this.onOk = onOk;
+  }
+  onOpen() {
+    this.titleEl.setText(this.titulo);
+    this.contentEl.createEl("p", { cls: "gf-campo-aviso", text: this.mensaje });
+    const row = this.contentEl.createDiv({ cls: "gf-botones" });
+    const cancelar = row.createEl("button", { text: "Cancelar" });
+    cancelar.addEventListener("click", () => this.close());
+    const ok = row.createEl("button", { text: this.textoOk, cls: "mod-warning" });
+    ok.addEventListener("click", () => {
+      this.close();
+      void this.onOk();
+    });
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+var EliminarEpicaHistoriaModal = class extends GestorModal {
+  onOpen() {
+    this.titleEl.setText("Eliminar \xE9pica o historia");
+    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+    const epica = this.campoEpica(funcs);
+    const fn = this.campoFuncionalidad(epica);
+    this.contentEl.createDiv({
+      cls: "gf-campo-aviso",
+      text: "Si eliges solo la \xE9pica se elimina toda la \xE9pica. Si eliges una historia, se elimina solo esa historia."
+    });
+    this.botones(() => {
+      var _a, _b;
+      this.limpiarError(epica);
+      const objetivo = (_b = (_a = fn.getFn()) != null ? _a : epica.getFunc()) != null ? _b : null;
+      if (!objetivo) {
+        this.mostrarError(epica, MSG_OBLIGATORIO);
+        return;
+      }
+      const esHistoria = fn.getFn() !== null;
+      const tipo = esHistoria ? "la historia" : "la \xE9pica";
+      new ConfirmacionModal(
+        this.plugin,
+        `Eliminar ${tipo}`,
+        `Se enviar\xE1 ${tipo} "${objetivo.nombre}" y TODO su contenido (${esHistoria ? "incidencias, documentos y notas" : "historias, incidencias, documentos y notas"}) a la papelera de Obsidian. \xBFContinuar?`,
+        "Eliminar",
+        async () => {
+          try {
+            await eliminarFuncionalidad(this.app, objetivo);
+            new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: "${objetivo.nombre}" eliminada.`);
+            this.close();
+          } catch (e) {
+            console.error(e);
+            new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: no se pudo eliminar.");
+          }
+        }
+      ).open();
+    }, "Eliminar\u2026");
+    if (funcs.length === 0)
+      this.sinEpicas(epica);
+  }
+};
+var EliminarIncidenciaModal = class extends GestorModal {
+  constructor(plugin, cfg) {
+    super(plugin);
+    this.cfg = {
+      titulo: "Eliminar incidencia",
+      singular: "incidencia",
+      tipos: () => plugin.settings.incidencias,
+      accionConfig: "Configurar incidencias",
+      conColaboradores: false,
+      ...cfg
+    };
+  }
+  onOpen() {
+    this.titleEl.setText(this.cfg.titulo);
+    const esDoc = this.cfg.singular === "documento";
+    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+    const epica = this.campoEpica(funcs);
+    const fn = this.campoFuncionalidad(epica);
+    const incCampo = this.campoSelect(esDoc ? "Documento" : "Incidencia", "Seleccionar");
+    let incidencias = [];
+    const repoblarInc = () => {
+      var _a;
+      const base = (_a = fn.getFn()) != null ? _a : epica.getFunc();
+      incidencias = base ? listIncidencias(this.app, base, this.cfg.tipos()) : [];
+      this.setOpciones(
+        incCampo.select,
+        "Seleccionar",
+        incidencias.map((i, idx) => ({ value: String(idx), label: `${i.tipoNombre}: ${i.nombre}` }))
+      );
+      incCampo.select.dispatchEvent(new Event("change"));
+    };
+    epica.select.addEventListener("change", repoblarInc);
+    fn.select.addEventListener("change", repoblarInc);
+    repoblarInc();
+    const incSel = () => {
+      var _a;
+      const v = incCampo.select.value;
+      return v === "" ? null : (_a = incidencias[Number(v)]) != null ? _a : null;
+    };
+    this.botones(() => {
+      var _a, _b;
+      this.limpiarError(incCampo);
+      const i = incSel();
+      const origen = (_b = (_a = fn.getFn()) != null ? _a : epica.getFunc()) != null ? _b : null;
+      if (!i || !origen) {
+        this.mostrarError(incCampo, `Selecciona ${esDoc ? "el documento" : "la incidencia"}.`);
+        return;
+      }
+      const tipo = esDoc ? "el documento" : "la incidencia";
+      new ConfirmacionModal(
+        this.plugin,
+        `Eliminar ${esDoc ? "documento" : "incidencia"}`,
+        `Se enviar\xE1 ${tipo} "${i.nombre}" a la papelera de Obsidian y se quitar\xE1 del \xEDndice de su nota. \xBFContinuar?`,
+        "Eliminar",
+        async () => {
+          try {
+            await eliminarIncidencia(this.app, i.file, origen);
+            new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: "${i.nombre}" eliminado.`);
+            this.close();
+          } catch (e) {
+            console.error(e);
+            new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: no se pudo eliminar.");
+          }
+        }
+      ).open();
+    }, "Eliminar\u2026");
+    if (funcs.length === 0)
+      this.sinEpicas(epica);
   }
 };
 
@@ -5442,7 +5642,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
           chk.checked = completado;
           chk.addEventListener("change", () => {
             if (chk.checked) {
-              new ConfirmacionModal(
+              new ConfirmacionModal2(
                 this.app,
                 "Marcar como hecha",
                 "\xBFMarcar esta incidencia como hecha? Su estado pasar\xE1 a completado.",
@@ -5453,7 +5653,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
                 }
               ).open();
             } else {
-              new ConfirmacionModal(
+              new ConfirmacionModal2(
                 this.app,
                 "Marcar como pendiente",
                 "\xBFQuitar el estado de completado de esta incidencia? Volver\xE1 a Por hacer.",
@@ -5565,7 +5765,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     await this.recargar();
   }
 };
-var ConfirmacionModal = class extends import_obsidian12.Modal {
+var ConfirmacionModal2 = class extends import_obsidian12.Modal {
   constructor(app, titulo, mensaje, textoOk, onOk, onCancel) {
     super(app);
     this.titulo = titulo;
@@ -6112,6 +6312,21 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
       callback: () => this.abrirModal("mover")
     });
     this.addCommand({
+      id: "eliminar-epica-historia",
+      name: "Eliminar \xE9pica o historia",
+      callback: () => this.abrirModal("eliminarEpicaHistoria")
+    });
+    this.addCommand({
+      id: "eliminar-incidencia",
+      name: "Eliminar incidencia",
+      callback: () => this.abrirModal("eliminarIncidencia")
+    });
+    this.addCommand({
+      id: "eliminar-documento",
+      name: "Eliminar documento",
+      callback: () => this.abrirModal("eliminarDocumento")
+    });
+    this.addCommand({
       id: "asignar-colaborador",
       name: "Asignar colaborador",
       callback: () => this.abrirModal("asignar")
@@ -6269,6 +6484,20 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
       case "editarDocumento":
         new MoverIncidenciaModal(this, {
           titulo: "Editar documento",
+          singular: "documento",
+          tipos: () => this.settings.documentos,
+          accionConfig: "Configurar documentos"
+        }).open();
+        break;
+      case "eliminarEpicaHistoria":
+        new EliminarEpicaHistoriaModal(this).open();
+        break;
+      case "eliminarIncidencia":
+        new EliminarIncidenciaModal(this).open();
+        break;
+      case "eliminarDocumento":
+        new EliminarIncidenciaModal(this, {
+          titulo: "Eliminar documento",
           singular: "documento",
           tipos: () => this.settings.documentos,
           accionConfig: "Configurar documentos"

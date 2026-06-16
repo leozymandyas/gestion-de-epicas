@@ -1,6 +1,6 @@
 {
 	"name": "gestion-de-epicas",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "Plugin de Obsidian para gestionar épicas de producto: historias, tareas, pendientes, sprints y roadmap.",
 	"main": "main.js",
 	"scripts": {
