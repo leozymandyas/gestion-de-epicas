@@ -21,8 +21,9 @@ import {
 	renombrarEtiquetaHistoria,
 } from "./files";
 import { Etiqueta } from "./settings";
-import { colorAleatorio, renderChipEtiqueta, renderSelectorColor } from "./colores";
+import { colorAleatorio, colorDesdeNombre, renderChipEtiqueta, renderSelectorColor } from "./colores";
 import { ConfirmacionModal } from "./modals";
+import { menuNotaEnEvento } from "./menu-contextual";
 
 export const VIEW_TYPE_ETIQUETAR_HISTORIAS = "gestor-funciones-etiquetar-historias";
 
@@ -208,15 +209,21 @@ export class EtiquetarHistoriasView extends ItemView {
 		if (cards.length === 0) {
 			cuerpo.createDiv({ cls: "gf-kanban-vacio", text: "Sin historias." });
 		}
-		for (const card of cards) this.renderTarjeta(cuerpo, card);
+		for (const card of cards) this.renderTarjeta(cuerpo, card, carril.nombre);
 	}
 
-	private renderTarjeta(cuerpo: HTMLElement, card: HistCard): void {
+	private renderTarjeta(cuerpo: HTMLElement, card: HistCard, carrilKey: string): void {
 		const el = cuerpo.createDiv({ cls: "gf-kanban-card gf-orgdocs-card" });
+		el.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			menuNotaEnEvento(this.plugin, card.file, e);
+		});
 		el.draggable = true;
 		el.addEventListener("dragstart", (e) => {
 			e.dataTransfer?.setData("text/plain", card.file.path);
 		});
+		// Chip "Historia" (color por carril) para mantener la consistencia visual.
+		renderChipEtiqueta(el, "Historia", colorDesdeNombre(`etq-${carrilKey}`));
 		if (card.etiqueta) {
 			renderChipEtiqueta(el, card.etiqueta, this.colorEtiqueta(card.etiqueta));
 		}

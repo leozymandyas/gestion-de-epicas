@@ -17,6 +17,7 @@ import {
 } from "./files";
 import { CARRIL_DOCS_TODOS, DocCarril, OrganizacionDocsEpica } from "./settings";
 import { renderChipEtiqueta } from "./colores";
+import { menuNotaEnEvento } from "./menu-contextual";
 
 export const VIEW_TYPE_ORGANIZAR_DOCS = "gestor-funciones-organizar-docs";
 
@@ -57,7 +58,7 @@ export class OrganizarDocumentosView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Tablero de documentos — Gestión de épicas";
+		return "Documentos por segmentos — Gestión de épicas";
 	}
 
 	getIcon(): string {
@@ -174,7 +175,7 @@ export class OrganizarDocumentosView extends ItemView {
 		if (!carpetasGestionListas(this.app)) {
 			const aviso = cont.createDiv({ cls: "gf-kanban-aviso" });
 			aviso.createEl("p", {
-				text: "Crea las carpetas de gestión desde el panel de acciones antes de usar el Tablero de documentos.",
+				text: "Crea las carpetas de gestión desde el panel de acciones antes de usar Documentos por segmentos.",
 			});
 			const btn = aviso.createEl("button", { text: "Abrir panel de acciones", cls: "mod-cta" });
 			btn.addEventListener("click", () => void this.plugin.abrirAcciones());
@@ -261,6 +262,10 @@ export class OrganizarDocumentosView extends ItemView {
 
 	private renderTarjeta(cuerpo: HTMLElement, card: DocCard, carrilId: string): void {
 		const el = cuerpo.createDiv({ cls: "gf-kanban-card gf-orgdocs-card" });
+		el.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			menuNotaEnEvento(this.plugin, card.file, e);
+		});
 		el.draggable = true;
 		el.addEventListener("dragstart", (e) => {
 			e.dataTransfer?.setData(

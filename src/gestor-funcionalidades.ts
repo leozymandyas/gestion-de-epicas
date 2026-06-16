@@ -13,8 +13,9 @@ import {
 	listFuncionalidadesDe,
 } from "./files";
 import { Etiqueta, normalizarEstado } from "./settings";
-import { renderChipEtiqueta } from "./colores";
+import { colorDesdeNombre, renderChipEtiqueta } from "./colores";
 import { ConfirmacionModal, crearSelectorEtiquetas } from "./modals";
+import { menuNotaEnEvento } from "./menu-contextual";
 import { AnioPickerModal, crearMultiSelect, crearSelect, habilitarScrollHorizontal } from "./ui";
 
 export const VIEW_TYPE_GESTOR_FN = "gestor-funciones-gestor-fn";
@@ -356,6 +357,10 @@ export class GestorFuncionalidadesView extends ItemView {
 
 	private renderTarjeta(cuerpo: HTMLElement, card: CardHist, sprintCol: number | null): void {
 		const el = cuerpo.createDiv({ cls: "gf-kanban-card" });
+		el.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			menuNotaEnEvento(this.plugin, card.file, e);
+		});
 		el.draggable = true;
 		el.addEventListener("dragstart", (e) => {
 			e.dataTransfer?.setData(
@@ -395,14 +400,14 @@ export class GestorFuncionalidadesView extends ItemView {
 		head.createDiv({ cls: "gf-kanban-card-nombre", text: card.nombre });
 		// La épica de la historia se muestra siempre.
 		el.createDiv({ cls: "gf-kanban-card-func", text: card.epicaNombre });
-		if (card.etiquetas.length > 0 || card.colaboradores.length > 0) {
-			const chips = el.createDiv({ cls: "gf-kanban-card-chips" });
-			for (const n of card.etiquetas) {
-				renderChipEtiqueta(chips, n, this.colorEtiqueta.get(n) ?? "#B9BEC6");
-			}
-			for (const c of card.colaboradores) {
-				renderChipEtiqueta(chips, c, this.colorColab(c));
-			}
+		// Chip "Historia" (color por carril/sprint) + etiquetas + colaboradores.
+		const chips = el.createDiv({ cls: "gf-kanban-card-chips" });
+		renderChipEtiqueta(chips, "Historia", colorDesdeNombre(`sprint-${sprintCol ?? "sin"}`));
+		for (const n of card.etiquetas) {
+			renderChipEtiqueta(chips, n, this.colorEtiqueta.get(n) ?? "#B9BEC6");
+		}
+		for (const c of card.colaboradores) {
+			renderChipEtiqueta(chips, c, this.colorColab(c));
 		}
 
 		el.addEventListener("click", () => void this.plugin.mostrarNota(card.file));

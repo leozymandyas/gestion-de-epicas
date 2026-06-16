@@ -1508,3 +1508,27 @@
 .gf-colab-chips {
 	margin: 0 0 6px 0;
 }
+
+/* Botón flotante "Gestión de épicas" sobre la nota activa. */
+.gf-fab {
+	position: absolute;
+	right: 20px;
+	bottom: 20px;
+	z-index: var(--layer-popover);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	border-radius: 50%;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	box-shadow: var(--shadow-s);
+	cursor: pointer;
+}
+
+.gf-fab:hover {
+	background-color: var(--interactive-accent-hover);
+}

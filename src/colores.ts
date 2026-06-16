@@ -14,6 +14,13 @@ export function colorAleatorio(): string {
 	return ETIQUETA_COLORES[Math.floor(Math.random() * ETIQUETA_COLORES.length)].color;
 }
 
+/** Color estable de la paleta derivado de un texto (mismo texto ⇒ mismo color). */
+export function colorDesdeNombre(nombre: string): string {
+	let h = 0;
+	for (let i = 0; i < nombre.length; i++) h = (h * 31 + nombre.charCodeAt(i)) >>> 0;
+	return ETIQUETA_COLORES[h % ETIQUETA_COLORES.length].color;
+}
+
 /** Nombre legible de un color de la paleta (o el hex si no pertenece). */
 export function nombreColor(color: string): string {
 	return ETIQUETA_COLORES.find((c) => c.color.toLowerCase() === color.toLowerCase())?.nombre ?? color;

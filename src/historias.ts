@@ -10,8 +10,9 @@ import {
 	listFuncionalidadesDe,
 	moverHistoriaAEpica,
 } from "./files";
-import { renderChipEtiqueta } from "./colores";
+import { colorDesdeNombre, renderChipEtiqueta } from "./colores";
 import { ConfirmacionModal } from "./modals";
+import { menuNotaEnEvento } from "./menu-contextual";
 import { normalizarEstado } from "./settings";
 
 export const VIEW_TYPE_HISTORIAS = "gestor-funciones-historias";
@@ -43,7 +44,7 @@ export class HistoriasView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Historias — Gestión de épicas";
+		return "Historias por épica — Gestión de épicas";
 	}
 
 	getIcon(): string {
@@ -135,6 +136,10 @@ export class HistoriasView extends ItemView {
 			e.preventDefault();
 			void this.plugin.mostrarNota(grupo.epica.file);
 		});
+		titulo.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			menuNotaEnEvento(this.plugin, grupo.epica.file, e);
+		});
 		// Colaboradores asignados a la épica, junto al nombre.
 		const colabs = getAsignados(this.app, grupo.epica.file).filter((n) =>
 			this.plugin.settings.colaboradores.some((c) => c.nombre === n && c.visible !== false)
@@ -154,6 +159,10 @@ export class HistoriasView extends ItemView {
 		for (const hist of grupo.historias) {
 			const completado = normalizarEstado(hist.estado ?? "") === "completado";
 			const li = ul.createEl("li", { cls: "gf-arrastrable" + (completado ? " gf-colab-hecha" : "") });
+			li.addEventListener("contextmenu", (e) => {
+				e.preventDefault();
+				menuNotaEnEvento(this.plugin, hist.file, e);
+			});
 			li.draggable = true;
 			li.addEventListener("dragstart", () => {
 				this.arrastre = { ref: hist, origenSlug: grupo.epica.slug };
@@ -169,7 +178,8 @@ export class HistoriasView extends ItemView {
 				chk.checked = !quiere; // se revierte hasta confirmar
 				this.confirmarEstado(hist, quiere);
 			});
-			// Etiquetas asignadas a la historia, antes de su nombre.
+			// Chip "Historia" (color por carril) + etiquetas, antes del nombre.
+			renderChipEtiqueta(li, "Historia", colorDesdeNombre(grupo.epica.slug));
 			for (const etq of leerEtiquetasHistoria(this.app, hist.file)) {
 				renderChipEtiqueta(li, etq, colorEtq.get(etq) ?? "#B9BEC6");
 			}

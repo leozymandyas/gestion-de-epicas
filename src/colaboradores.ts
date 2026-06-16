@@ -10,10 +10,12 @@ import {
 	listFuncionalidades,
 	listFuncionalidadesDe,
 	listIncidencias,
+	moverIncidencia,
 } from "./files";
 import { Etiqueta, normalizarEstado } from "./settings";
 import { renderChipEtiqueta } from "./colores";
 import { crearSelectorEtiquetas } from "./modals";
+import { menuNotaEnEvento } from "./menu-contextual";
 import { crearSelect, crearMultiSelect } from "./ui";
 
 export const VIEW_TYPE_COLABORADORES = "gestor-funciones-colaboradores";
@@ -99,8 +101,12 @@ export class TareasColaboradorView extends ItemView {
 		filtroClave?: string;
 		/** Solo en modo contexto (documentos): la épica/historia del grupo. */
 		ref?: FuncRef;
+		/** Solo en modo contexto: nombre de la épica del grupo (para el filtro). */
+		epicaNombre?: string;
 		items: IncidenciaAsignada[];
 	}> = [];
+	/** Si ya se aplicó la selección por defecto del filtro de épicas. */
+	private epicaFiltroInit = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: GestorFuncionesPlugin, cfg: VistaColabConfig) {
 		super(leaf);
@@ -211,6 +217,9 @@ export class TareasColaboradorView extends ItemView {
 		// Modo contexto: un grupo por épica/historia (orden de aparición).
 		const porContexto = new Map<string, IncidenciaAsignada[]>();
 		const refPorContexto = new Map<string, FuncRef>();
+		/** Épicas presentes esta carga (para carriles vacíos) y cuáles tienen docs. */
+		const epicasRef = new Map<string, FuncRef>();
+		const epicasConDocs = new Set<string>();
 
 		const maxSprints = this.plugin.settings.numSprints;
 		const filtrar = !(this.desde === 1 && this.hasta === maxSprints);
@@ -222,16 +231,15 @@ export class TareasColaboradorView extends ItemView {
 
 		const recoger = (ref: FuncRef, contexto: string, epicaNombre: string) => {
 			refPorContexto.set(contexto, ref);
-			if (!this.epicaConocidas.has(epicaNombre)) {
-				this.epicaConocidas.add(epicaNombre);
-				this.epicaSeleccion.add(epicaNombre);
-			}
+			// La selección por defecto se decide al final (solo épicas con docs).
+			this.epicaConocidas.add(epicaNombre);
 			for (const inc of this.listar(ref)) {
 				const item: IncidenciaAsignada = { ...inc, contexto, epicaNombre };
 				if (this.cfg.agruparPor === "contexto") {
 					const lista = porContexto.get(contexto) ?? [];
 					lista.push(item);
 					porContexto.set(contexto, lista);
+					epicasConDocs.add(epicaNombre);
 					continue;
 				}
 				// Modo colaborador: solo asignados activos; si no queda ninguno, va
@@ -251,7 +259,10 @@ export class TareasColaboradorView extends ItemView {
 
 		for (const epica of listFuncionalidades(this.app, admin)) {
 			const epicaPasa = !filtrar || (await pasaSprints(epica));
-			if (epicaPasa) recoger(epica, epica.nombre, epica.nombre);
+			if (epicaPasa) {
+				epicasRef.set(epica.nombre, epica);
+				recoger(epica, epica.nombre, epica.nombre);
+			}
 			for (const fn of listFuncionalidadesDe(this.app, epica.folder)) {
 				const fnPasa = epicaPasa || (await pasaSprints(fn));
 				if (fnPasa) recoger(fn, `${epica.nombre} › ${fn.nombre}`, epica.nombre);
@@ -259,10 +270,11 @@ export class TareasColaboradorView extends ItemView {
 		}
 
 		if (this.cfg.agruparPor === "contexto") {
-			// Orden manual guardado; las no listadas, alfabéticas al final.
+			// Todas las claves (con y sin documentos) en UNA sola lista ordenada, para
+			// que la posición de un carril no cambie al agregarle o quitarle un item.
 			const orden = this.plugin.settings.ordenGruposDocumentos;
 			const idx = new Map(orden.map((c, i) => [c, i] as const));
-			const claves = [...porContexto.keys()].sort((a, b) => {
+			const claves = [...new Set([...porContexto.keys(), ...epicasRef.keys()])].sort((a, b) => {
 				const ia = idx.get(a);
 				const ib = idx.get(b);
 				if (ia !== undefined && ib !== undefined) return ia - ib;
@@ -271,13 +283,20 @@ export class TareasColaboradorView extends ItemView {
 				return a.localeCompare(b, "es");
 			});
 			for (const clave of claves) {
+				const items = porContexto.get(clave) ?? [];
 				this.grupos.push({
 					clave,
 					conProgreso: false,
 					filtroClave: clave,
-					ref: refPorContexto.get(clave),
-					items: porContexto.get(clave) ?? [],
+					ref: refPorContexto.get(clave) ?? epicasRef.get(clave),
+					epicaNombre: items[0]?.epicaNombre ?? clave,
+					items,
 				});
+			}
+			// Selección por defecto del filtro: solo las épicas con documentos.
+			if (this.cfg.conEpicaFilter && !this.epicaFiltroInit) {
+				this.epicaFiltroInit = true;
+				this.epicaSeleccion = new Set(epicasConDocs);
 			}
 		} else {
 			for (const colab of visibles) {
@@ -344,9 +363,12 @@ export class TareasColaboradorView extends ItemView {
 					continue;
 				}
 				const items = this.ordenarItems(visiblesDe(grupo.items));
-				// Los grupos vacíos solo se muestran en modo colaborador (cada
-				// colaborador tiene su tarjeta aunque no tenga elementos).
-				if (items.length === 0 && this.cfg.agruparPor === "contexto") continue;
+				// En modo contexto (documentos), un grupo vacío se muestra solo si su
+				// épica está marcada en el filtro; si no, se oculta.
+				if (items.length === 0 && this.cfg.agruparPor === "contexto") {
+					const en = grupo.epicaNombre ?? grupo.clave;
+					if (!(this.cfg.conEpicaFilter && this.epicaSeleccion.has(en))) continue;
+				}
 				if (items.length === 0 && grupo.filtroClave === SIN_ASIGNAR) continue;
 				// Tarjetas reordenables: colaboradores (no "Sin asignar") y, en
 				// documentos, las épicas/historias.
@@ -485,7 +507,24 @@ export class TareasColaboradorView extends ItemView {
 		// Solo en modo colaborador se puede reasignar arrastrando incidencias entre
 		// carriles (cada carril es un colaborador, o "Sin asignar").
 		const reasignable = this.cfg.agruparPor === "colaborador";
+		// En modo contexto (documentos) se puede mover un documento a otra épica.
+		const movible = this.cfg.agruparPor === "contexto" && !!ref;
 		const tarjeta = cuerpo.createDiv({ cls: "gf-colab-card" });
+
+		if (movible && ref) {
+			tarjeta.addEventListener("dragover", (e) => {
+				if (this.arrastre?.tipo !== "item" || this.arrastre.origen === grupoFiltro) return;
+				e.preventDefault();
+				tarjeta.addClass("gf-drop-card");
+			});
+			tarjeta.addEventListener("dragleave", () => tarjeta.removeClass("gf-drop-card"));
+			tarjeta.addEventListener("drop", (e) => {
+				if (this.arrastre?.tipo !== "item" || this.arrastre.origen === grupoFiltro) return;
+				e.preventDefault();
+				tarjeta.removeClass("gf-drop-card");
+				this.confirmarMoverDocumento(this.arrastre.valor, ref);
+			});
+		}
 
 		// Soltar una incidencia en el carril (no sobre otra) la reasigna a este
 		// colaborador (o la deja sin asignar). Pide confirmación.
@@ -516,6 +555,10 @@ export class TareasColaboradorView extends ItemView {
 			tituloEl.addEventListener("click", (e) => {
 				e.preventDefault();
 				void this.plugin.mostrarNota(ref.file);
+			});
+			tituloEl.addEventListener("contextmenu", (e) => {
+				e.preventDefault();
+				menuNotaEnEvento(this.plugin, ref.file, e);
 			});
 			for (const c of getAsignados(this.app, ref.file).filter((n) =>
 				this.plugin.settings.colaboradores.some((x) => x.nombre === n && x.visible !== false)
@@ -581,6 +624,10 @@ export class TareasColaboradorView extends ItemView {
 			for (const inc of aMostrar) {
 				const completado = this.estadoDe(inc.file) === "completado";
 				const li = ul.createEl("li", { cls: completado ? "gf-colab-hecha" : "" });
+				li.addEventListener("contextmenu", (e) => {
+					e.preventDefault();
+					menuNotaEnEvento(this.plugin, inc.file, e);
+				});
 
 				// Reordenar elementos dentro de la tarjeta (arrastrar uno sobre otro).
 				{
@@ -606,9 +653,12 @@ export class TareasColaboradorView extends ItemView {
 						e.stopPropagation();
 						li.removeClass("gf-drop-card");
 						const origen = this.arrastre.valor;
-						// Distinto carril (colaborador): reasignar; mismo carril: reordenar.
+						// Distinto carril: reasignar (colaborador) o mover de épica
+						// (documentos); mismo carril: reordenar.
 						if (reasignable && this.arrastre.origen !== grupoFiltro) {
 							this.confirmarReasignar(origen, grupoFiltro);
+						} else if (movible && ref && this.arrastre.origen !== grupoFiltro) {
+							this.confirmarMoverDocumento(origen, ref);
 						} else if (origen !== inc.file.path) {
 							void this.moverItem(origen, inc.file.path);
 						}
@@ -769,6 +819,34 @@ export class TareasColaboradorView extends ItemView {
 			else delete fm.asignados;
 		});
 		// El evento metadataCache "changed" refresca la vista con el dato nuevo.
+	}
+
+	/** Pide confirmación y mueve un documento a otra épica (con sus enlaces). */
+	private confirmarMoverDocumento(path: string, destino: FuncRef): void {
+		const item = this.grupos.flatMap((g) => g.items).find((i) => i.file.path === path);
+		const origen = this.grupos.find((g) => g.items.some((i) => i.file.path === path))?.ref;
+		if (!item || !origen || origen.slug === destino.slug) return;
+		new ConfirmacionModal(
+			this.app,
+			"Mover documento",
+			`¿Mover el documento "${item.nombre}" a la épica "${destino.nombre}"? Se moverá junto con sus enlaces relacionados.`,
+			"Mover",
+			() => void this.moverDocumento(item.file, origen, destino, item.tipoNombre, item.nombre),
+			() => {
+				/* cancelado */
+			}
+		).open();
+	}
+
+	private async moverDocumento(
+		file: TFile,
+		origen: FuncRef,
+		destino: FuncRef,
+		tipoNombre: string,
+		nombre: string
+	): Promise<void> {
+		await moverIncidencia(this.app, file, origen, destino, tipoNombre, nombre);
+		await this.recargar();
 	}
 }
 

@@ -26,7 +26,8 @@ const REGISTRO: Accion[] = [
 	{ id: "asignar-sprint", icono: "calendar-days", texto: "Asignar sprint", accion: (p) => p.abrirModal("sprint") },
 	{ id: "asignar-etiquetas", icono: "tag", texto: "Etiquetas de historias", accion: (p) => void p.abrirEtiquetarHistorias() },
 	{ id: "editar-nombre", icono: "pencil", texto: "Editar nombre", accion: (p) => p.abrirModal("editarNombre") },
-	{ id: "mover-historia", icono: "folder-tree", texto: "Historias", accion: (p) => void p.abrirHistorias() },
+	{ id: "mover-historia", icono: "folder-tree", texto: "Historias por épica", accion: (p) => void p.abrirHistorias() },
+	{ id: "mover-historias-tablero", icono: "folder-symlink", texto: "Mover historias", accion: (p) => void p.abrirMoverHistorias() },
 	{ id: "archivar-epica", icono: "archive", texto: "Archivar épicas", accion: (p) => p.abrirModal("mover") },
 	{ id: "eliminar-epica-historia", icono: "trash-2", texto: "Eliminar épica o historia", accion: (p) => p.abrirModal("eliminarEpicaHistoria") },
 	// Épicas — tableros
@@ -34,14 +35,14 @@ const REGISTRO: Accion[] = [
 	{ id: "gestor-funcionalidades", icono: "calendar-range", texto: "Planeación", accion: (p) => void p.abrirGestorFuncionalidades() },
 	// Incidencias
 	{ id: "crear-incidencia", icono: "circle-dot", texto: "Crear incidencia", accion: (p) => p.abrirModal("incidencia") },
-	{ id: "editar-incidencia", icono: "replace", texto: "Editar incidencia", accion: (p) => p.abrirModal("editarIncidencia") },
-	{ id: "eliminar-incidencia", icono: "trash-2", texto: "Eliminar incidencia", accion: (p) => p.abrirModal("eliminarIncidencia") },
 	// Documentos
 	{ id: "crear-documento", icono: "file-plus", texto: "Crear documento", accion: (p) => p.abrirModal("documento") },
-	{ id: "editar-documento", icono: "replace", texto: "Editar documento", accion: (p) => p.abrirModal("editarDocumento") },
-	{ id: "eliminar-documento", icono: "trash-2", texto: "Eliminar documento", accion: (p) => p.abrirModal("eliminarDocumento") },
 	{ id: "documentos", icono: "file-text", texto: "Documentos por épica", accion: (p) => void p.abrirDocumentos() },
-	{ id: "organizar-documentos", icono: "layout-grid", texto: "Tablero de documentos", accion: (p) => void p.abrirOrganizarDocumentos() },
+	{ id: "organizar-documentos", icono: "layout-grid", texto: "Documentos por segmentos", accion: (p) => void p.abrirOrganizarDocumentos() },
+	{ id: "clasificar-documentos", icono: "folder-search", texto: "Clasificar documentos", accion: (p) => void p.abrirClasificarDocumentos() },
+	{ id: "reclasificar-documentos", icono: "replace", texto: "Reclasificar documentos", accion: (p) => void p.abrirReclasificarDocumentos() },
+	{ id: "reclasificar-incidencias", icono: "replace", texto: "Reclasificar incidencias", accion: (p) => void p.abrirReclasificarIncidencias() },
+	{ id: "mover-incidencias", icono: "folder-symlink", texto: "Mover incidencias", accion: (p) => void p.abrirMoverIncidencias() },
 	// Colaboradores
 	{ id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
 	{ id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
@@ -55,13 +56,18 @@ const POR_ID = new Map(REGISTRO.map((a) => [a.id, a]));
 
 /** Estructura de secciones del panel; `fija` = no se puede ocultar. */
 const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }> = [
-	{ id: "epicas-admin", titulo: "Administración", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint"] },
+	// Pestaña Épicas.
+	{ id: "epicas-crear", titulo: "Crear", acciones: ["crear-epica", "crear-funcionalidad"] },
+	{ id: "epicas-sprints", titulo: "Sprints y roadmap", acciones: ["asignar-sprint", "roadmap", "gestor-funcionalidades"] },
+	{ id: "epicas-historias", titulo: "Historias", acciones: ["mover-historia", "mover-historias-tablero", "asignar-etiquetas"] },
 	{ id: "epicas-colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
 	{ id: "epicas-acciones", titulo: "Acciones", acciones: ["editar-nombre", "archivar-epica", "eliminar-epica-historia"] },
-	{ id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "mover-historia", "asignar-etiquetas", "gestor-funcionalidades"] },
-	{ id: "incidencias", titulo: "Incidencias", acciones: ["crear-incidencia", "editar-incidencia", "eliminar-incidencia"] },
-	{ id: "documentos", titulo: "Documentos", acciones: ["crear-documento", "editar-documento", "eliminar-documento"] },
-	{ id: "incidencias-tableros", titulo: "Tableros", acciones: ["incidencias-por-colaborador", "documentos", "organizar-documentos"] },
+	// Pestaña Incidencias.
+	{ id: "inc-crear", titulo: "Crear", acciones: ["crear-incidencia"] },
+	{ id: "inc-tableros", titulo: "Tableros", acciones: ["incidencias-por-colaborador", "mover-incidencias", "reclasificar-incidencias"] },
+	// Pestaña Documentos.
+	{ id: "doc-crear", titulo: "Crear", acciones: ["crear-documento"] },
+	{ id: "doc-tableros", titulo: "Tableros", acciones: ["documentos", "organizar-documentos", "clasificar-documentos", "reclasificar-documentos"] },
 ];
 
 /**
@@ -71,8 +77,9 @@ const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }>
  */
 const TABS: Array<{ id: string; titulo: string; secciones: string[] }> = [
 	{ id: "favoritos", titulo: "Favoritos", secciones: [] },
-	{ id: "epicas", titulo: "Épicas", secciones: ["epicas-admin", "epicas-colaboradores", "epicas-acciones", "epicas-tableros"] },
-	{ id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "documentos", "incidencias-tableros"] },
+	{ id: "epicas", titulo: "Épicas", secciones: ["epicas-crear", "epicas-sprints", "epicas-historias", "epicas-colaboradores", "epicas-acciones"] },
+	{ id: "incidencias", titulo: "Incidencias", secciones: ["inc-crear", "inc-tableros"] },
+	{ id: "documentos", titulo: "Documentos", secciones: ["doc-crear", "doc-tableros"] },
 ];
 
 /** Resuelve un id de acción integrada a su acción ejecutable. */

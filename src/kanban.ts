@@ -13,6 +13,7 @@ import { normalizarEstado, type Carril } from "./settings";
 import { renderChipEtiqueta } from "./colores";
 import { crearSelectorEtiquetas } from "./modals";
 import { crearSelect, habilitarScrollHorizontal } from "./ui";
+import { menuNotaEnEvento } from "./menu-contextual";
 
 export const VIEW_TYPE_KANBAN = "gestor-funciones-kanban";
 
@@ -310,6 +311,10 @@ export class KanbanView extends ItemView {
 
 	private renderTarjeta(cuerpo: HTMLElement, card: ItemCard, carrilActual: Carril): void {
 		const el = cuerpo.createDiv({ cls: "gf-kanban-card" });
+		el.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			menuNotaEnEvento(this.plugin, card.file, e);
+		});
 		el.draggable = true;
 		el.addEventListener("dragstart", (e) => {
 			e.dataTransfer?.setData(

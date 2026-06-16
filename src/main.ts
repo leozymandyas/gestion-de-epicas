@@ -37,9 +37,18 @@ import {
 import { OrganizarDocumentosView, VIEW_TYPE_ORGANIZAR_DOCS } from "./organizar-documentos";
 import { HistoriasView, VIEW_TYPE_HISTORIAS } from "./historias";
 import { EtiquetarHistoriasView, VIEW_TYPE_ETIQUETAR_HISTORIAS } from "./etiquetar-historias";
+import { ClasificarDocumentosView, VIEW_TYPE_CLASIFICAR_DOCS } from "./clasificar-documentos";
+import {
+	RECLASIFICAR_DOCS,
+	RECLASIFICAR_INC,
+	ReclasificarTipoView,
+	VIEW_TYPE_RECLASIFICAR_DOCS,
+	VIEW_TYPE_RECLASIFICAR_INC,
+} from "./reclasificar-tipo";
+import { MoverIncidenciasView, VIEW_TYPE_MOVER_INC } from "./mover-incidencias";
+import { MoverHistoriasView, VIEW_TYPE_MOVER_HISTORIAS } from "./mover-historias";
 import { ICONO_PLUGIN, ICONO_PLUGIN_SVG } from "./icono";
 import {
-	AgregarLinkModal,
 	AsignarColaboradorModal,
 	AsignarSprintModal,
 	AvisoConfiguracionModal,
@@ -50,11 +59,10 @@ import {
 	CrearTareaModal,
 	EditarNombreModal,
 	EliminarEpicaHistoriaModal,
-	EliminarIncidenciaModal,
 	MoverEpicaModal,
-	MoverIncidenciaModal,
 } from "./modals";
 import { GestorEtiquetasModal } from "./etiquetas-modal";
+import { registrarBotonFlotante } from "./menu-contextual";
 
 export type TipoModal =
 	| "funcionalidad"
@@ -68,13 +76,9 @@ export type TipoModal =
 	| "configIncidencias"
 	| "incidencia"
 	| "editarNombre"
-	| "editarIncidencia"
 	| "configDocumentos"
 	| "documento"
-	| "editarDocumento"
-	| "eliminarEpicaHistoria"
-	| "eliminarIncidencia"
-	| "eliminarDocumento";
+	| "eliminarEpicaHistoria";
 
 /** Sanea el mapa de organización por carriles de "Organizar documentos". */
 function sanearOrganizacionDocs(valor: unknown): Record<string, OrganizacionDocsEpica> {
@@ -150,18 +154,24 @@ export default class GestorFuncionesPlugin extends Plugin {
 			VIEW_TYPE_ETIQUETAR_HISTORIAS,
 			(leaf) => new EtiquetarHistoriasView(leaf, this)
 		);
-
-		// "Agregar link" en el menú contextual del editor, en cualquier nota.
-		this.registerEvent(
-			this.app.workspace.on("editor-menu", (menu, editor) => {
-				menu.addItem((item) =>
-					item
-						.setTitle("Agregar link")
-						.setIcon("link")
-						.onClick(() => new AgregarLinkModal(this, editor).open())
-				);
-			})
+		this.registerView(
+			VIEW_TYPE_CLASIFICAR_DOCS,
+			(leaf) => new ClasificarDocumentosView(leaf, this)
 		);
+		this.registerView(
+			VIEW_TYPE_RECLASIFICAR_DOCS,
+			(leaf) => new ReclasificarTipoView(leaf, this, RECLASIFICAR_DOCS)
+		);
+		this.registerView(
+			VIEW_TYPE_RECLASIFICAR_INC,
+			(leaf) => new ReclasificarTipoView(leaf, this, RECLASIFICAR_INC)
+		);
+		this.registerView(VIEW_TYPE_MOVER_INC, (leaf) => new MoverIncidenciasView(leaf, this));
+		this.registerView(VIEW_TYPE_MOVER_HISTORIAS, (leaf) => new MoverHistoriasView(leaf, this));
+
+		// Botón flotante "Gestión de épicas" sobre la nota activa: Renombrar,
+		// Eliminar, Copiar ruta y Agregar link.
+		registrarBotonFlotante(this);
 
 		// Obsidian antepone el nombre del plugin en la paleta:
 		// "Gestión de épicas: Crear épica", etc.
@@ -216,11 +226,6 @@ export default class GestorFuncionesPlugin extends Plugin {
 			callback: () => void this.abrirHistorias(),
 		});
 		this.addCommand({
-			id: "editar-incidencia",
-			name: "Editar incidencia (tipo / mover)",
-			callback: () => this.abrirModal("editarIncidencia"),
-		});
-		this.addCommand({
 			id: "configurar-documentos",
 			name: "Configurar documentos",
 			callback: () => this.abrirModal("configDocumentos"),
@@ -231,19 +236,39 @@ export default class GestorFuncionesPlugin extends Plugin {
 			callback: () => this.abrirModal("documento"),
 		});
 		this.addCommand({
-			id: "editar-documento",
-			name: "Editar documento (tipo / mover)",
-			callback: () => this.abrirModal("editarDocumento"),
-		});
-		this.addCommand({
 			id: "abrir-documentos",
 			name: "Documentos por épica",
 			callback: () => void this.abrirDocumentos(),
 		});
 		this.addCommand({
 			id: "organizar-documentos",
-			name: "Tablero de documentos",
+			name: "Documentos por segmentos",
 			callback: () => void this.abrirOrganizarDocumentos(),
+		});
+		this.addCommand({
+			id: "clasificar-documentos",
+			name: "Clasificar documentos",
+			callback: () => void this.abrirClasificarDocumentos(),
+		});
+		this.addCommand({
+			id: "reclasificar-documentos",
+			name: "Reclasificar documentos",
+			callback: () => void this.abrirReclasificarDocumentos(),
+		});
+		this.addCommand({
+			id: "reclasificar-incidencias",
+			name: "Reclasificar incidencias",
+			callback: () => void this.abrirReclasificarIncidencias(),
+		});
+		this.addCommand({
+			id: "mover-incidencias",
+			name: "Mover incidencias entre historias",
+			callback: () => void this.abrirMoverIncidencias(),
+		});
+		this.addCommand({
+			id: "mover-historias-tablero",
+			name: "Mover historias entre épicas",
+			callback: () => void this.abrirMoverHistorias(),
 		});
 		this.addCommand({
 			id: "mover-epica",
@@ -254,16 +279,6 @@ export default class GestorFuncionesPlugin extends Plugin {
 			id: "eliminar-epica-historia",
 			name: "Eliminar épica o historia",
 			callback: () => this.abrirModal("eliminarEpicaHistoria"),
-		});
-		this.addCommand({
-			id: "eliminar-incidencia",
-			name: "Eliminar incidencia",
-			callback: () => this.abrirModal("eliminarIncidencia"),
-		});
-		this.addCommand({
-			id: "eliminar-documento",
-			name: "Eliminar documento",
-			callback: () => this.abrirModal("eliminarDocumento"),
 		});
 		this.addCommand({
 			id: "asignar-colaborador",
@@ -374,9 +389,6 @@ export default class GestorFuncionesPlugin extends Plugin {
 			case "editarNombre":
 				new EditarNombreModal(this).open();
 				break;
-			case "editarIncidencia":
-				new MoverIncidenciaModal(this).open();
-				break;
 			case "configDocumentos":
 				new GestorEtiquetasModal(this, {
 					titulo: "Configurar documentos",
@@ -401,29 +413,11 @@ export default class GestorFuncionesPlugin extends Plugin {
 					tipos: () => this.settings.documentos,
 					accionConfig: "Configurar documentos",
 					conColaboradores: false,
-				}).open();
-				break;
-			case "editarDocumento":
-				new MoverIncidenciaModal(this, {
-					titulo: "Editar documento",
-					singular: "documento",
-					tipos: () => this.settings.documentos,
-					accionConfig: "Configurar documentos",
+					soloEpica: true,
 				}).open();
 				break;
 			case "eliminarEpicaHistoria":
 				new EliminarEpicaHistoriaModal(this).open();
-				break;
-			case "eliminarIncidencia":
-				new EliminarIncidenciaModal(this).open();
-				break;
-			case "eliminarDocumento":
-				new EliminarIncidenciaModal(this, {
-					titulo: "Eliminar documento",
-					singular: "documento",
-					tipos: () => this.settings.documentos,
-					accionConfig: "Configurar documentos",
-				}).open();
 				break;
 		}
 	}
@@ -494,6 +488,26 @@ export default class GestorFuncionesPlugin extends Plugin {
 
 	async abrirEtiquetarHistorias(): Promise<void> {
 		await this.abrirVistaEnPestana(VIEW_TYPE_ETIQUETAR_HISTORIAS);
+	}
+
+	async abrirClasificarDocumentos(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_CLASIFICAR_DOCS);
+	}
+
+	async abrirReclasificarDocumentos(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_RECLASIFICAR_DOCS);
+	}
+
+	async abrirReclasificarIncidencias(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_RECLASIFICAR_INC);
+	}
+
+	async abrirMoverIncidencias(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_MOVER_INC);
+	}
+
+	async abrirMoverHistorias(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_MOVER_HISTORIAS);
 	}
 
 	/**

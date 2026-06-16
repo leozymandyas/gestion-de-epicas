@@ -28,6 +28,10 @@ export const ICONOS_TAB: Record<string, string> = {
 	colaboradores: ICONO_MATERIAL(
 		"M360-80v-529q-91-24-145.5-100.5T160-880h80q0 83 53.5 141.5T430-680h100q30 0 56 11t47 32l181 181-56 56-158-158v478h-80v-240h-80v240h-80Zm63.5-663.5Q400-767 400-800t23.5-56.5Q447-880 480-880t56.5 23.5Q560-833 560-800t-23.5 56.5Q513-720 480-720t-56.5-23.5Z"
 	),
+	// Icono de documentos: una hoja con líneas (Material Symbols "description").
+	documentos: ICONO_MATERIAL(
+		"M320-240h320v-80H320v80Zm0-160h320v-80H320v80ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520Z"
+	),
 };
 
 /** Inyecta el icono de una pestaña dentro de `parent`, escalado a 18px. */

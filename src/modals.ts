@@ -540,14 +540,14 @@ export class MoverIncidenciaModal extends GestorModal {
 		// --- Sección: seleccionar la incidencia ---
 		this.seccion(`${this.cfg.singular === "documento" ? "Documento" : "Incidencia"} a editar`);
 		const epica = this.campoEpica(funcs);
-		const fn = this.campoFuncionalidad(epica);
+		const fn = this.cfg.soloEpica ? null : this.campoFuncionalidad(epica);
 		const incCampo = this.campoSelect(
 			this.cfg.singular === "documento" ? "Documento" : "Incidencia",
 			"Seleccionar"
 		);
 		let incidencias: files.Incidencia[] = [];
 		const repoblarInc = () => {
-			const base = fn.getFn() ?? epica.getFunc();
+			const base = fn?.getFn() ?? epica.getFunc();
 			incidencias = base ? files.listIncidencias(this.app, base, this.cfg.tipos()) : [];
 			this.setOpciones(
 				incCampo.select,
@@ -557,7 +557,7 @@ export class MoverIncidenciaModal extends GestorModal {
 			incCampo.select.dispatchEvent(new Event("change"));
 		};
 		epica.select.addEventListener("change", repoblarInc);
-		fn.select.addEventListener("change", repoblarInc);
+		fn?.select.addEventListener("change", repoblarInc);
 
 		const incSel = (): files.Incidencia | null => {
 			const v = incCampo.select.value;
@@ -590,16 +590,18 @@ export class MoverIncidenciaModal extends GestorModal {
 			"Seleccionar épica",
 			funcs.map((f) => ({ value: f.slug, label: f.nombre }))
 		);
-		const destFn = this.campoSelect("Historia (opcional)", "Nivel épica");
+		const destFn = this.cfg.soloEpica ? null : this.campoSelect("Historia (opcional)", "Nivel épica");
 		let destHist: files.FuncRef[] = [];
 		const repoblarDest = () => {
 			const e = funcs.find((f) => f.slug === destEpica.select.value);
 			destHist = e ? files.listFuncionalidadesDe(this.app, e.folder) : [];
-			this.setOpciones(
-				destFn.select,
-				"Nivel épica",
-				destHist.map((h) => ({ value: h.slug, label: h.nombre }))
-			);
+			if (destFn) {
+				this.setOpciones(
+					destFn.select,
+					"Nivel épica",
+					destHist.map((h) => ({ value: h.slug, label: h.nombre }))
+				);
+			}
 		};
 		destEpica.select.addEventListener("change", repoblarDest);
 
@@ -609,12 +611,12 @@ export class MoverIncidenciaModal extends GestorModal {
 			if (ep) {
 				destEpica.select.value = ep.slug;
 				repoblarDest();
-				const h = fn.getFn();
-				if (h) destFn.select.value = h.slug;
+				const h = fn?.getFn();
+				if (h && destFn) destFn.select.value = h.slug;
 			}
 		};
 		epica.select.addEventListener("change", sincronizarDestino);
-		fn.select.addEventListener("change", sincronizarDestino);
+		fn?.select.addEventListener("change", sincronizarDestino);
 
 		repoblarInc();
 		repoblarDest();
@@ -625,9 +627,9 @@ export class MoverIncidenciaModal extends GestorModal {
 			this.limpiarError(tipo);
 			this.limpiarError(destEpica);
 			const i = incSel();
-			const origen = fn.getFn() ?? epica.getFunc() ?? null;
+			const origen = fn?.getFn() ?? epica.getFunc() ?? null;
 			const destE = funcs.find((f) => f.slug === destEpica.select.value) ?? null;
-			const destH = destHist.find((h) => h.slug === destFn.select.value) ?? null;
+			const destH = destFn ? destHist.find((h) => h.slug === destFn.select.value) ?? null : null;
 			const destFunc = destH ?? destE;
 			const nuevoTipo = tipo.select.value;
 			const nuevoNombre = nombre.input.value.trim();
@@ -735,6 +737,9 @@ export interface ConfigTipoNota {
 	/** Si ofrece asignar colaboradores al crear (las incidencias sí; los
 	 * documentos no). Por defecto, true. */
 	conColaboradores: boolean;
+	/** Si solo opera a nivel de épica (sin selector de historia). Los documentos
+	 * se crean/mueven solo en la épica. Por defecto, false. */
+	soloEpica?: boolean;
 }
 
 export class CrearIncidenciaModal extends GestorModal {
@@ -757,7 +762,7 @@ export class CrearIncidenciaModal extends GestorModal {
 		this.titleEl.setText(this.cfg.titulo);
 		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
 		const func = this.campoEpica(funcs);
-		const fn = this.campoFuncionalidad(func);
+		const fn = this.cfg.soloEpica ? null : this.campoFuncionalidad(func);
 
 		const tipo = this.campoSelect(`Tipo de ${this.cfg.singular}`, "Seleccionar tipo");
 		this.setOpciones(
@@ -806,7 +811,7 @@ export class CrearIncidenciaModal extends GestorModal {
 				ok = false;
 			}
 			if (!ok || !f) return;
-			const destino = fn.getFn() ?? f;
+			const destino = fn?.getFn() ?? f;
 			const tipoSlug = slugify(tipoNombre);
 
 			let base = slugify(valor);
@@ -1902,12 +1907,12 @@ export class EliminarIncidenciaModal extends GestorModal {
 		const esDoc = this.cfg.singular === "documento";
 		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
 		const epica = this.campoEpica(funcs);
-		const fn = this.campoFuncionalidad(epica);
+		const fn = this.cfg.soloEpica ? null : this.campoFuncionalidad(epica);
 		const incCampo = this.campoSelect(esDoc ? "Documento" : "Incidencia", "Seleccionar");
 
 		let incidencias: files.Incidencia[] = [];
 		const repoblarInc = () => {
-			const base = fn.getFn() ?? epica.getFunc();
+			const base = fn?.getFn() ?? epica.getFunc();
 			incidencias = base ? files.listIncidencias(this.app, base, this.cfg.tipos()) : [];
 			this.setOpciones(
 				incCampo.select,
@@ -1917,7 +1922,7 @@ export class EliminarIncidenciaModal extends GestorModal {
 			incCampo.select.dispatchEvent(new Event("change"));
 		};
 		epica.select.addEventListener("change", repoblarInc);
-		fn.select.addEventListener("change", repoblarInc);
+		fn?.select.addEventListener("change", repoblarInc);
 		repoblarInc();
 
 		const incSel = (): files.Incidencia | null => {
@@ -1928,7 +1933,7 @@ export class EliminarIncidenciaModal extends GestorModal {
 		this.botones(() => {
 			this.limpiarError(incCampo);
 			const i = incSel();
-			const origen = fn.getFn() ?? epica.getFunc() ?? null;
+			const origen = fn?.getFn() ?? epica.getFunc() ?? null;
 			if (!i || !origen) {
 				this.mostrarError(incCampo, `Selecciona ${esDoc ? "el documento" : "la incidencia"}.`);
 				return;

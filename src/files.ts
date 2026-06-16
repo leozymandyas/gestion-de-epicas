@@ -754,6 +754,11 @@ export async function renombrarFuncionalidad(
 	const deseado = slugify(nuevoNombre);
 	if (!parent || !deseado || deseado === ref.slug) return;
 	const nuevoSlug = slugCarpetaLibre(app, parent.path, deseado);
+	// Actualiza las referencias de los hijos (`epica`/`historia: [[slug]]`,
+	// enlaces en el cuerpo y sprints.md) antes de renombrar la carpeta.
+	for (const f of notasDescendientes(ref.folder)) {
+		await app.vault.process(f, (c) => reemplazarEnlace(c, ref.slug, nuevoSlug));
+	}
 	// Primero la nota principal (se mueve con la carpeta al renombrarla después).
 	await app.fileManager.renameFile(ref.file, normalizePath(`${ref.folder.path}/${nuevoSlug}.md`));
 	await app.fileManager.renameFile(ref.folder, normalizePath(`${parent.path}/${nuevoSlug}`));
@@ -1097,4 +1102,87 @@ export async function archivarEpica(
 	await app.fileManager.renameFile(epica.folder, normalizePath(`${destino}/${newSlug}`));
 
 	return { renombrada: true, nombre: nuevoNombre };
+}
+
+// ===== Documentos sin clasificar =====
+
+/** Un .md suelto dentro de una épica, fuera del árbol de documentos. */
+export interface DocSinClasificar {
+	file: TFile;
+	nombre: string;
+	/** Épica (carpeta de primer nivel) a la que pertenece. */
+	epica: FuncRef;
+	/** Ruta relativa a la carpeta de la épica (incluye el .md). */
+	rutaRelativa: string;
+	/** Fecha/hora de creación del archivo. */
+	ctime: number;
+}
+
+/**
+ * Notas .md dentro de la carpeta de una épica (raíz o subcarpetas) que NO están
+ * clasificadas en el árbol de documentos ni son notas gestionadas (épica,
+ * historia, incidencias, tareas, pendientes, sprints). Son candidatas a
+ * clasificarse como documento.
+ */
+export function listSinClasificar(
+	app: App,
+	epica: FuncRef,
+	incidenciaTipos: { nombre: string }[],
+	documentoTipos: { nombre: string }[]
+): DocSinClasificar[] {
+	const docSlugs = new Set(documentoTipos.map((t) => slugify(t.nombre)));
+	const incSlugs = new Set(incidenciaTipos.map((t) => slugify(t.nombre)));
+	const base = epica.folder.path;
+	const out: DocSinClasificar[] = [];
+	const recorrer = (folder: TFolder) => {
+		for (const c of folder.children) {
+			if (c instanceof TFolder) {
+				recorrer(c);
+				continue;
+			}
+			if (!(c instanceof TFile) || c.extension !== "md") continue;
+			const parentName = c.parent?.name ?? "";
+			// Excluir lo ya clasificado o gestionado por el plugin.
+			if (docSlugs.has(parentName)) continue; // documento clasificado
+			if (incSlugs.has(parentName)) continue; // incidencia
+			if (parentName === "tareas" || parentName === "pendientes") continue;
+			if (c.basename === parentName) continue; // nota principal (épica/historia)
+			if (c.basename === "sprints") continue;
+			out.push({
+				file: c,
+				nombre: nombreDesdeFrontmatter(app, c, c.basename),
+				epica,
+				rutaRelativa: c.path.startsWith(base + "/") ? c.path.slice(base.length + 1) : c.name,
+				ctime: c.stat.ctime,
+			});
+		}
+	};
+	recorrer(epica.folder);
+	return out;
+}
+
+/**
+ * Clasifica un .md suelto como documento de un tipo: lo mueve a la carpeta del
+ * tipo a nivel de la épica (`<épica>/<tipo>/`), fija su frontmatter y lo añade al
+ * índice de la nota de la épica.
+ */
+export async function clasificarComoDocumento(
+	app: App,
+	file: TFile,
+	epica: FuncRef,
+	tipoNombre: string
+): Promise<void> {
+	const tipoSlug = slugify(tipoNombre);
+	const dir = `${epica.folder.path}/${tipoSlug}`;
+	await ensureFolder(app, dir);
+	const nombre = nombreDesdeFrontmatter(app, file, file.basename);
+	const base = slugArchivoLibre(app, dir, file.basename);
+	const destPath = normalizePath(`${dir}/${base}.md`);
+	if (destPath !== file.path) await app.fileManager.renameFile(file, destPath);
+	await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+		fm.tipo = tipoSlug;
+		fm.historia = `[[${epica.slug}]]`;
+		if (!fm.nombre) fm.nombre = nombre;
+	});
+	await appendToSection(app, epica.file, `## ${tipoNombre}`, `- [ ] [[${base}|${nombre}]]`);
 }
