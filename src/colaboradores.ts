@@ -126,8 +126,27 @@ export class TareasColaboradorView extends ItemView {
 	}
 
 	async recargar(): Promise<void> {
-		await this.recolectar();
+		try {
+			await this.recolectar();
+		} catch (e) {
+			console.error("gestion-de-epicas: error al recolectar", e);
+		}
 		this.render();
+	}
+
+	/** Renderiza protegido: ante cualquier error muestra el mensaje en vez de
+	 * dejar la pestaña en blanco. */
+	render(): void {
+		try {
+			this.renderInterno();
+		} catch (e) {
+			console.error("gestion-de-epicas: error al renderizar", e);
+			this.contentEl.empty();
+			this.contentEl.createEl("p", {
+				cls: "gf-kanban-vacio",
+				text: `Error al cargar la vista: ${e instanceof Error ? e.message : String(e)}`,
+			});
+		}
 	}
 
 	private listar(ref: FuncRef): Incidencia[] {
@@ -187,7 +206,7 @@ export class TareasColaboradorView extends ItemView {
 		}
 	}
 
-	render(): void {
+	private renderInterno(): void {
 		const cont = this.contentEl;
 		cont.empty();
 		cont.addClass("gf-colab");

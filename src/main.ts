@@ -5,6 +5,7 @@ import {
 	COLOR_ETIQUETA_DEFECTO,
 	Carril,
 	DEFAULT_SETTINGS,
+	DOCUMENTOS_DEFECTO,
 	Etiqueta,
 	GestorSettings,
 	GestorSettingTab,
@@ -516,7 +517,10 @@ export default class GestorFuncionesPlugin extends Plugin {
 			data.incidencias === undefined
 				? INCIDENCIAS_DEFECTO.map((i) => ({ ...i }))
 				: data.incidencias.map(conVisible);
-		const documentos: Etiqueta[] = (data.documentos ?? []).map(conVisible);
+		const documentos: Etiqueta[] =
+			data.documentos === undefined
+				? DOCUMENTOS_DEFECTO.map((d) => ({ ...d }))
+				: data.documentos.map(conVisible);
 		const favoritos = (data.favoritos ?? []).map(String);
 		// Número de sprints configurable (mínimo 1, sin tope).
 		const numCrudo = Math.trunc(Number(data.numSprints));

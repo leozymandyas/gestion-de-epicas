@@ -75,6 +75,13 @@ export const INCIDENCIAS_DEFECTO: Etiqueta[] = [
 	{ nombre: "Bug", color: "#FA4D56", visible: true },
 ];
 
+/** Tipos de documento sembrados por defecto; editables y eliminables. */
+export const DOCUMENTOS_DEFECTO: Etiqueta[] = [
+	{ nombre: "Documento", color: "#2D9CFF", visible: true },
+	{ nombre: "Nota reunión", color: "#C950E8", visible: true },
+	{ nombre: "Regla de negocio", color: "#2BC275", visible: true },
+];
+
 /** Carriles por defecto: no pueden eliminarse (sí ocultarse). Sus valores
  * conservan la convención de frontmatter existente. */
 export const CARRILES_DEFECTO: Carril[] = [
@@ -98,7 +105,7 @@ export const DEFAULT_SETTINGS: GestorSettings = {
 	carriles: CARRILES_DEFECTO.map((c) => ({ ...c })),
 	colaboradores: [{ ...COLABORADOR_DEFECTO }],
 	incidencias: INCIDENCIAS_DEFECTO.map((i) => ({ ...i })),
-	documentos: [],
+	documentos: DOCUMENTOS_DEFECTO.map((i) => ({ ...i })),
 	numSprints: NUM_SPRINTS_DEFECTO,
 	favoritos: [],
 	ordenFunc: [],

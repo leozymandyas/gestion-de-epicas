@@ -1621,6 +1621,11 @@ var INCIDENCIAS_DEFECTO = [
   { nombre: "Pendiente", color: "#FF9F2E", visible: true },
   { nombre: "Bug", color: "#FA4D56", visible: true }
 ];
+var DOCUMENTOS_DEFECTO = [
+  { nombre: "Documento", color: "#2D9CFF", visible: true },
+  { nombre: "Nota reuni\xF3n", color: "#C950E8", visible: true },
+  { nombre: "Regla de negocio", color: "#2BC275", visible: true }
+];
 var CARRILES_DEFECTO = [
   { nombre: "Backlog", valor: "backlog", color: "#B9BEC6", visible: true },
   { nombre: "Por hacer", valor: "por-hacer", color: "#FFC93C", visible: true },
@@ -1638,7 +1643,7 @@ var DEFAULT_SETTINGS = {
   carriles: CARRILES_DEFECTO.map((c) => ({ ...c })),
   colaboradores: [{ ...COLABORADOR_DEFECTO }],
   incidencias: INCIDENCIAS_DEFECTO.map((i) => ({ ...i })),
-  documentos: [],
+  documentos: DOCUMENTOS_DEFECTO.map((i) => ({ ...i })),
   numSprints: NUM_SPRINTS_DEFECTO,
   favoritos: [],
   ordenFunc: [],
@@ -5040,8 +5045,26 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     }, 150);
   }
   async recargar() {
-    await this.recolectar();
+    try {
+      await this.recolectar();
+    } catch (e) {
+      console.error("gestion-de-epicas: error al recolectar", e);
+    }
     this.render();
+  }
+  /** Renderiza protegido: ante cualquier error muestra el mensaje en vez de
+   * dejar la pestaña en blanco. */
+  render() {
+    try {
+      this.renderInterno();
+    } catch (e) {
+      console.error("gestion-de-epicas: error al renderizar", e);
+      this.contentEl.empty();
+      this.contentEl.createEl("p", {
+        cls: "gf-kanban-vacio",
+        text: `Error al cargar la vista: ${e instanceof Error ? e.message : String(e)}`
+      });
+    }
   }
   listar(ref) {
     return this.cfg.incluyeTareasPendientes ? listIncidencias(this.app, ref, this.cfg.registro(this.plugin)) : listDocumentos(this.app, ref, this.cfg.registro(this.plugin));
@@ -5094,7 +5117,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       }
     }
   }
-  render() {
+  renderInterno() {
     const cont = this.contentEl;
     cont.empty();
     cont.addClass("gf-colab");
@@ -5690,7 +5713,7 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
     await this.app.workspace.revealLeaf(hoja);
   }
   async loadSettings() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     const guardado = await this.loadData();
     const primeraVez = guardado === null || guardado === void 0;
     const data = guardado != null ? guardado : {};
@@ -5731,11 +5754,11 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
     });
     const colaboradores = primeraVez ? [{ ...COLABORADOR_DEFECTO }] : ((_c = data.colaboradores) != null ? _c : []).map(conVisible);
     const incidencias = data.incidencias === void 0 ? INCIDENCIAS_DEFECTO.map((i) => ({ ...i })) : data.incidencias.map(conVisible);
-    const documentos = ((_d = data.documentos) != null ? _d : []).map(conVisible);
-    const favoritos = ((_e = data.favoritos) != null ? _e : []).map(String);
+    const documentos = data.documentos === void 0 ? DOCUMENTOS_DEFECTO.map((d) => ({ ...d })) : data.documentos.map(conVisible);
+    const favoritos = ((_d = data.favoritos) != null ? _d : []).map(String);
     const numCrudo = Math.trunc(Number(data.numSprints));
     const numSprints = Number.isFinite(numCrudo) && numCrudo >= 1 ? numCrudo : NUM_SPRINTS_DEFECTO;
-    const filtro = (_f = data.kanban) == null ? void 0 : _f.filtroSprints;
+    const filtro = (_e = data.kanban) == null ? void 0 : _e.filtroSprints;
     const enRango = (v, defecto) => v && v >= 1 && v <= numSprints ? v : defecto;
     const anioValido = (v) => {
       const n = Math.trunc(Number(v));
@@ -5751,15 +5774,15 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
       documentos,
       numSprints,
       favoritos,
-      ordenFunc: ((_g = data.ordenFunc) != null ? _g : []).map(String),
+      ordenFunc: ((_f = data.ordenFunc) != null ? _f : []).map(String),
       sprintActual: {
-        anio: anioValido((_h = data.sprintActual) == null ? void 0 : _h.anio),
-        sprint: enRango((_i = data.sprintActual) == null ? void 0 : _i.sprint, 1)
+        anio: anioValido((_g = data.sprintActual) == null ? void 0 : _g.anio),
+        sprint: enRango((_h = data.sprintActual) == null ? void 0 : _h.sprint, 1)
       },
       kanban: {
-        tareas: { ...(_k = (_j = data.kanban) == null ? void 0 : _j.tareas) != null ? _k : {} },
-        pendientes: { ...(_m = (_l = data.kanban) == null ? void 0 : _l.pendientes) != null ? _m : {} },
-        ordenIncidencias: ((_o = (_n = data.kanban) == null ? void 0 : _n.ordenIncidencias) != null ? _o : []).map(String),
+        tareas: { ...(_j = (_i = data.kanban) == null ? void 0 : _i.tareas) != null ? _j : {} },
+        pendientes: { ...(_l = (_k = data.kanban) == null ? void 0 : _k.pendientes) != null ? _l : {} },
+        ordenIncidencias: ((_n = (_m = data.kanban) == null ? void 0 : _m.ordenIncidencias) != null ? _n : []).map(String),
         filtroSprints: {
           desde: enRango(filtro == null ? void 0 : filtro.desde, 1),
           hasta: enRango(filtro == null ? void 0 : filtro.hasta, numSprints)
