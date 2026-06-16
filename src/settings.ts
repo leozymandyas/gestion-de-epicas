@@ -95,8 +95,9 @@ export const NUM_SPRINTS_DEFECTO = 24;
 
 export const COLOR_ETIQUETA_DEFECTO = "#5082ff";
 
-/** Colaborador sembrado en la primera ejecución; editable y eliminable. */
-export const COLABORADOR_DEFECTO: Etiqueta = { nombre: "Yo", color: COLOR_ETIQUETA_DEFECTO };
+/** Colaborador sembrado en la primera ejecución; editable y eliminable. Usa un
+ * color de la paleta cerrada (Azul) para ser coherente con etiquetas/colaboradores. */
+export const COLABORADOR_DEFECTO: Etiqueta = { nombre: "Yo", color: "#2D9CFF" };
 
 /** Tipos de incidencia sembrados por defecto; editables y eliminables. */
 export const INCIDENCIAS_DEFECTO: Etiqueta[] = [
@@ -171,32 +172,23 @@ export class GestorSettingTab extends PluginSettingTab {
 		this.renderSprintCard(containerEl);
 
 		this.renderTarjeta(
-			"Carriles Kanban",
-			"Aquí puedes configurar los carriles que aparecen en los tableros kanban.",
+			"Tipos de incidencia",
+			"Configura los tipos de incidencia disponibles al crear incidencias.",
 			[
 				{
-					texto: "Configurar carriles…",
-					onClick: () =>
-						new GestorEtiquetasModal(this.plugin, {
-							titulo: "Carriles Kanban",
-							nuevoNombre: "Nuevo carril",
-							conVisible: true,
-							tituloVisible: "Mostrar este carril en los tableros kanban",
-							puedeEliminar: (et) => !esCarrilDefecto(et as Carril),
-							nuevoItem: (nombre, color): Carril => ({
-								nombre,
-								valor: slugify(nombre) || nombre,
-								color,
-								visible: true,
-							}),
-							secciones: [
-								{
-									id: "carriles",
-									titulo: "Carriles",
-									getLista: () => this.plugin.settings.carriles,
-								},
-							],
-						}).open(),
+					texto: "Configurar incidencias…",
+					onClick: () => this.plugin.abrirModal("configIncidencias"),
+				},
+			]
+		);
+
+		this.renderTarjeta(
+			"Tipos de documento",
+			"Configura los tipos de documento disponibles al crear documentos.",
+			[
+				{
+					texto: "Configurar documentos…",
+					onClick: () => this.plugin.abrirModal("configDocumentos"),
 				},
 			]
 		);

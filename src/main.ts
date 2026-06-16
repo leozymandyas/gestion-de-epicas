@@ -17,15 +17,8 @@ import {
 import {
 	carpetasGestionListas,
 	eliminarColaborador,
-	eliminarEtiquetaHistoria,
-	eliminarEtiquetaSprint,
-	guardarEtiquetasEpica,
-	leerEtiquetasEpica,
-	listFuncionalidades,
 	migrarCarpetasHistorias,
 	renombrarColaborador,
-	renombrarEtiquetaHistoria,
-	renombrarEtiquetaSprint,
 	renombrarTipoIncidencia,
 } from "./files";
 import { aplicarConfigBoveda, guardarConfigBoveda } from "./config-io";
@@ -42,11 +35,12 @@ import {
 	VIEW_TYPE_DOCUMENTOS,
 } from "./colaboradores";
 import { OrganizarDocumentosView, VIEW_TYPE_ORGANIZAR_DOCS } from "./organizar-documentos";
+import { HistoriasView, VIEW_TYPE_HISTORIAS } from "./historias";
+import { EtiquetarHistoriasView, VIEW_TYPE_ETIQUETAR_HISTORIAS } from "./etiquetar-historias";
 import { ICONO_PLUGIN, ICONO_PLUGIN_SVG } from "./icono";
 import {
 	AgregarLinkModal,
 	AsignarColaboradorModal,
-	AsignarEtiquetasModal,
 	AsignarSprintModal,
 	AvisoConfiguracionModal,
 	CrearFuncionalidadModal,
@@ -58,7 +52,6 @@ import {
 	EliminarEpicaHistoriaModal,
 	EliminarIncidenciaModal,
 	MoverEpicaModal,
-	MoverHistoriaModal,
 	MoverIncidenciaModal,
 } from "./modals";
 import { GestorEtiquetasModal } from "./etiquetas-modal";
@@ -72,12 +65,9 @@ export type TipoModal =
 	| "mover"
 	| "asignar"
 	| "colaboradores"
-	| "etiquetasEpica"
-	| "asignarEtiquetas"
 	| "configIncidencias"
 	| "incidencia"
 	| "editarNombre"
-	| "moverHistoria"
 	| "editarIncidencia"
 	| "configDocumentos"
 	| "documento"
@@ -155,6 +145,11 @@ export default class GestorFuncionesPlugin extends Plugin {
 			VIEW_TYPE_ORGANIZAR_DOCS,
 			(leaf) => new OrganizarDocumentosView(leaf, this)
 		);
+		this.registerView(VIEW_TYPE_HISTORIAS, (leaf) => new HistoriasView(leaf, this));
+		this.registerView(
+			VIEW_TYPE_ETIQUETAR_HISTORIAS,
+			(leaf) => new EtiquetarHistoriasView(leaf, this)
+		);
 
 		// "Agregar link" en el menú contextual del editor, en cualquier nota.
 		this.registerEvent(
@@ -181,14 +176,9 @@ export default class GestorFuncionesPlugin extends Plugin {
 			callback: () => this.abrirModal("crearfn"),
 		});
 		this.addCommand({
-			id: "etiquetas-por-epica",
-			name: "Configurar etiquetas",
-			callback: () => this.abrirModal("etiquetasEpica"),
-		});
-		this.addCommand({
 			id: "asignar-etiquetas",
-			name: "Etiquetar historias",
-			callback: () => this.abrirModal("asignarEtiquetas"),
+			name: "Etiquetas de historias",
+			callback: () => void this.abrirEtiquetarHistorias(),
 		});
 		this.addCommand({
 			id: "configurar-incidencias",
@@ -222,8 +212,8 @@ export default class GestorFuncionesPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "mover-historia",
-			name: "Mover historia a otra épica",
-			callback: () => this.abrirModal("moverHistoria"),
+			name: "Historias",
+			callback: () => void this.abrirHistorias(),
 		});
 		this.addCommand({
 			id: "editar-incidencia",
@@ -247,12 +237,12 @@ export default class GestorFuncionesPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "abrir-documentos",
-			name: "Abrir documentos",
+			name: "Documentos por épica",
 			callback: () => void this.abrirDocumentos(),
 		});
 		this.addCommand({
 			id: "organizar-documentos",
-			name: "Organizar documentos",
+			name: "Tablero de documentos",
 			callback: () => void this.abrirOrganizarDocumentos(),
 		});
 		this.addCommand({
@@ -297,7 +287,7 @@ export default class GestorFuncionesPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "abrir-gestor-funcionalidades",
-			name: "Abrir gestión de historias",
+			name: "Abrir planeación",
 			callback: () => void this.abrirGestorFuncionalidades(),
 		});
 		this.addCommand({
@@ -361,24 +351,6 @@ export default class GestorFuncionesPlugin extends Plugin {
 					],
 				}).open();
 				break;
-			case "etiquetasEpica":
-				new GestorEtiquetasModal(this, {
-					titulo: "Configurar etiquetas",
-					nuevoNombre: "Etiqueta",
-					conVisible: true,
-					avisoEliminar: "Se quitará de las historias que la tengan asignada.",
-					porEpica: {
-						epicas: listFuncionalidades(this.app, this.settings.carpetaAdmin),
-						cargar: (ep) => leerEtiquetasEpica(this.app, ep),
-						guardar: (ep, lista) => guardarEtiquetasEpica(this.app, ep, lista),
-						renombrar: (ep, ant, nue) => renombrarEtiquetaHistoria(this.app, ep, ant, nue),
-						eliminar: (ep, nombre) => eliminarEtiquetaHistoria(this.app, ep, nombre),
-					},
-				}).open();
-				break;
-			case "asignarEtiquetas":
-				new AsignarEtiquetasModal(this).open();
-				break;
 			case "configIncidencias":
 				new GestorEtiquetasModal(this, {
 					titulo: "Configurar incidencias",
@@ -401,9 +373,6 @@ export default class GestorFuncionesPlugin extends Plugin {
 				break;
 			case "editarNombre":
 				new EditarNombreModal(this).open();
-				break;
-			case "moverHistoria":
-				new MoverHistoriaModal(this).open();
 				break;
 			case "editarIncidencia":
 				new MoverIncidenciaModal(this).open();
@@ -519,6 +488,14 @@ export default class GestorFuncionesPlugin extends Plugin {
 		await this.abrirVistaEnPestana(VIEW_TYPE_ORGANIZAR_DOCS);
 	}
 
+	async abrirHistorias(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_HISTORIAS);
+	}
+
+	async abrirEtiquetarHistorias(): Promise<void> {
+		await this.abrirVistaEnPestana(VIEW_TYPE_ETIQUETAR_HISTORIAS);
+	}
+
 	/**
 	 * Abre la vista como pestaña del área principal. Si quedó anclada en un
 	 * panel lateral (layouts guardados de versiones anteriores), la desancla
@@ -591,7 +568,11 @@ export default class GestorFuncionesPlugin extends Plugin {
 		});
 		const colaboradores: Etiqueta[] = primeraVez
 			? [{ ...COLABORADOR_DEFECTO }]
-			: (data.colaboradores ?? []).map(conVisible);
+			: (data.colaboradores ?? []).map(conVisible).map((c) =>
+					// Migración: el color por defecto antiguo ("#5082ff") quedaba fuera
+					// de la paleta cerrada; se reasigna al Azul de la paleta.
+					c.color.toLowerCase() === "#5082ff" ? { ...c, color: "#2D9CFF" } : c
+			  );
 		// Tipos de incidencia: si no hay clave guardada (usuarios previos), se siembran.
 		const incidencias: Etiqueta[] =
 			data.incidencias === undefined

@@ -24,27 +24,24 @@ const REGISTRO: Accion[] = [
 	{ id: "crear-epica", icono: "folder-plus", texto: "Crear épica", accion: (p) => p.abrirModal("funcionalidad") },
 	{ id: "crear-funcionalidad", icono: "puzzle", texto: "Crear historia", accion: (p) => p.abrirModal("crearfn") },
 	{ id: "asignar-sprint", icono: "calendar-days", texto: "Asignar sprint", accion: (p) => p.abrirModal("sprint") },
-	{ id: "etiquetas-epica", icono: "tags", texto: "Configurar etiquetas", accion: (p) => p.abrirModal("etiquetasEpica") },
-	{ id: "asignar-etiquetas", icono: "tag", texto: "Etiquetar historias", accion: (p) => p.abrirModal("asignarEtiquetas") },
+	{ id: "asignar-etiquetas", icono: "tag", texto: "Etiquetas de historias", accion: (p) => void p.abrirEtiquetarHistorias() },
 	{ id: "editar-nombre", icono: "pencil", texto: "Editar nombre", accion: (p) => p.abrirModal("editarNombre") },
-	{ id: "mover-historia", icono: "folder-symlink", texto: "Mover historia", accion: (p) => p.abrirModal("moverHistoria") },
+	{ id: "mover-historia", icono: "folder-tree", texto: "Historias", accion: (p) => void p.abrirHistorias() },
 	{ id: "archivar-epica", icono: "archive", texto: "Archivar épicas", accion: (p) => p.abrirModal("mover") },
 	{ id: "eliminar-epica-historia", icono: "trash-2", texto: "Eliminar épica o historia", accion: (p) => p.abrirModal("eliminarEpicaHistoria") },
 	// Épicas — tableros
 	{ id: "roadmap", icono: "map", texto: "Roadmap", accion: (p) => void p.abrirRoadmap() },
-	{ id: "gestor-funcionalidades", icono: "kanban-square", texto: "Gestión de historias", accion: (p) => void p.abrirGestorFuncionalidades() },
+	{ id: "gestor-funcionalidades", icono: "calendar-range", texto: "Planeación", accion: (p) => void p.abrirGestorFuncionalidades() },
 	// Incidencias
-	{ id: "configurar-incidencias", icono: "settings-2", texto: "Configurar incidencias", accion: (p) => p.abrirModal("configIncidencias") },
 	{ id: "crear-incidencia", icono: "circle-dot", texto: "Crear incidencia", accion: (p) => p.abrirModal("incidencia") },
 	{ id: "editar-incidencia", icono: "replace", texto: "Editar incidencia", accion: (p) => p.abrirModal("editarIncidencia") },
 	{ id: "eliminar-incidencia", icono: "trash-2", texto: "Eliminar incidencia", accion: (p) => p.abrirModal("eliminarIncidencia") },
 	// Documentos
-	{ id: "configurar-documentos", icono: "settings-2", texto: "Configurar documentos", accion: (p) => p.abrirModal("configDocumentos") },
 	{ id: "crear-documento", icono: "file-plus", texto: "Crear documento", accion: (p) => p.abrirModal("documento") },
 	{ id: "editar-documento", icono: "replace", texto: "Editar documento", accion: (p) => p.abrirModal("editarDocumento") },
 	{ id: "eliminar-documento", icono: "trash-2", texto: "Eliminar documento", accion: (p) => p.abrirModal("eliminarDocumento") },
-	{ id: "documentos", icono: "file-text", texto: "Documentos", accion: (p) => void p.abrirDocumentos() },
-	{ id: "organizar-documentos", icono: "layout-grid", texto: "Organizar documentos", accion: (p) => void p.abrirOrganizarDocumentos() },
+	{ id: "documentos", icono: "file-text", texto: "Documentos por épica", accion: (p) => void p.abrirDocumentos() },
+	{ id: "organizar-documentos", icono: "layout-grid", texto: "Tablero de documentos", accion: (p) => void p.abrirOrganizarDocumentos() },
 	// Colaboradores
 	{ id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
 	{ id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
@@ -58,13 +55,13 @@ const POR_ID = new Map(REGISTRO.map((a) => [a.id, a]));
 
 /** Estructura de secciones del panel; `fija` = no se puede ocultar. */
 const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }> = [
-	{ id: "epicas-admin", titulo: "Administración", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas"] },
-	{ id: "epicas-acciones", titulo: "Acciones", acciones: ["editar-nombre", "mover-historia", "archivar-epica", "eliminar-epica-historia"] },
-	{ id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
-	{ id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia"] },
-	{ id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "documentos", "organizar-documentos"] },
-	{ id: "incidencias-acciones", titulo: "Acciones", acciones: ["editar-incidencia", "eliminar-incidencia", "editar-documento", "eliminar-documento"] },
-	{ id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador", "incidencias-por-colaborador"] },
+	{ id: "epicas-admin", titulo: "Administración", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint"] },
+	{ id: "epicas-colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
+	{ id: "epicas-acciones", titulo: "Acciones", acciones: ["editar-nombre", "archivar-epica", "eliminar-epica-historia"] },
+	{ id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "mover-historia", "asignar-etiquetas", "gestor-funcionalidades"] },
+	{ id: "incidencias", titulo: "Incidencias", acciones: ["crear-incidencia", "editar-incidencia", "eliminar-incidencia"] },
+	{ id: "documentos", titulo: "Documentos", acciones: ["crear-documento", "editar-documento", "eliminar-documento"] },
+	{ id: "incidencias-tableros", titulo: "Tableros", acciones: ["incidencias-por-colaborador", "documentos", "organizar-documentos"] },
 ];
 
 /**
@@ -74,8 +71,8 @@ const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }>
  */
 const TABS: Array<{ id: string; titulo: string; secciones: string[] }> = [
 	{ id: "favoritos", titulo: "Favoritos", secciones: [] },
-	{ id: "epicas", titulo: "Épicas", secciones: ["epicas-admin", "epicas-acciones", "epicas-tableros"] },
-	{ id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "documentos", "incidencias-acciones", "colaboradores"] },
+	{ id: "epicas", titulo: "Épicas", secciones: ["epicas-admin", "epicas-colaboradores", "epicas-acciones", "epicas-tableros"] },
+	{ id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "documentos", "incidencias-tableros"] },
 ];
 
 /** Resuelve un id de acción integrada a su acción ejecutable. */

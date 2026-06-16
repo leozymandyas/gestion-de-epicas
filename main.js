@@ -22,7 +22,7 @@ __export(main_exports, {
   default: () => GestorFuncionesPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian14 = require("obsidian");
+var import_obsidian16 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian4 = require("obsidian");
@@ -1662,7 +1662,7 @@ var ConfirmarModal = class extends import_obsidian3.Modal {
 var CARRIL_DOCS_TODOS = "todos";
 var NUM_SPRINTS_DEFECTO = 24;
 var COLOR_ETIQUETA_DEFECTO = "#5082ff";
-var COLABORADOR_DEFECTO = { nombre: "Yo", color: COLOR_ETIQUETA_DEFECTO };
+var COLABORADOR_DEFECTO = { nombre: "Yo", color: "#2D9CFF" };
 var INCIDENCIAS_DEFECTO = [
   { nombre: "Tarea", color: "#2D9CFF", visible: true },
   { nombre: "Pendiente", color: "#FF9F2E", visible: true },
@@ -1705,9 +1705,6 @@ var DEFAULT_SETTINGS = {
     filtroSprints: { desde: 1, hasta: NUM_SPRINTS_DEFECTO }
   }
 };
-function esCarrilDefecto(carril) {
-  return CARRILES_DEFECTO.some((c) => c.valor === carril.valor);
-}
 var GestorSettingTab = class extends import_obsidian4.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -1719,31 +1716,22 @@ var GestorSettingTab = class extends import_obsidian4.PluginSettingTab {
     new import_obsidian4.Setting(containerEl).setName("Configuraci\xF3n del Sprint").setHeading();
     this.renderSprintCard(containerEl);
     this.renderTarjeta(
-      "Carriles Kanban",
-      "Aqu\xED puedes configurar los carriles que aparecen en los tableros kanban.",
+      "Tipos de incidencia",
+      "Configura los tipos de incidencia disponibles al crear incidencias.",
       [
         {
-          texto: "Configurar carriles\u2026",
-          onClick: () => new GestorEtiquetasModal(this.plugin, {
-            titulo: "Carriles Kanban",
-            nuevoNombre: "Nuevo carril",
-            conVisible: true,
-            tituloVisible: "Mostrar este carril en los tableros kanban",
-            puedeEliminar: (et) => !esCarrilDefecto(et),
-            nuevoItem: (nombre, color) => ({
-              nombre,
-              valor: slugify(nombre) || nombre,
-              color,
-              visible: true
-            }),
-            secciones: [
-              {
-                id: "carriles",
-                titulo: "Carriles",
-                getLista: () => this.plugin.settings.carriles
-              }
-            ]
-          }).open()
+          texto: "Configurar incidencias\u2026",
+          onClick: () => this.plugin.abrirModal("configIncidencias")
+        }
+      ]
+    );
+    this.renderTarjeta(
+      "Tipos de documento",
+      "Configura los tipos de documento disponibles al crear documentos.",
+      [
+        {
+          texto: "Configurar documentos\u2026",
+          onClick: () => this.plugin.abrirModal("configDocumentos")
         }
       ]
     );
@@ -1983,6 +1971,49 @@ var ICONO_PLUGIN_SVG = `<g transform="scale(0.19230769)" fill="currentColor"><g 
 
 // src/ui.ts
 var import_obsidian6 = require("obsidian");
+function habilitarScrollHorizontal(cont) {
+  cont.addEventListener(
+    "wheel",
+    (e) => {
+      if (e.deltaY === 0 || e.shiftKey)
+        return;
+      if (cont.scrollWidth <= cont.clientWidth)
+        return;
+      cont.scrollLeft += e.deltaY;
+      e.preventDefault();
+    },
+    { passive: false }
+  );
+  let dir = 0;
+  let timer = null;
+  const parar = () => {
+    if (timer !== null) {
+      window.clearInterval(timer);
+      timer = null;
+    }
+    dir = 0;
+  };
+  cont.addEventListener("dragover", (e) => {
+    const r = cont.getBoundingClientRect();
+    const margen = 64;
+    if (e.clientX < r.left + margen)
+      dir = -1;
+    else if (e.clientX > r.right - margen)
+      dir = 1;
+    else
+      dir = 0;
+    if (dir !== 0 && timer === null) {
+      timer = window.setInterval(() => {
+        cont.scrollLeft += dir * 16;
+      }, 16);
+    } else if (dir === 0) {
+      parar();
+    }
+  });
+  cont.addEventListener("dragleave", parar);
+  cont.addEventListener("drop", parar);
+  cont.addEventListener("dragend", parar);
+}
 function crearMultiSelect(opts) {
   const wrap = opts.parent.createDiv({ cls: "gf-multiselect" });
   const btn = wrap.createEl("button", { cls: "gf-multiselect-btn" });
@@ -2195,27 +2226,24 @@ var REGISTRO = [
   { id: "crear-epica", icono: "folder-plus", texto: "Crear \xE9pica", accion: (p) => p.abrirModal("funcionalidad") },
   { id: "crear-funcionalidad", icono: "puzzle", texto: "Crear historia", accion: (p) => p.abrirModal("crearfn") },
   { id: "asignar-sprint", icono: "calendar-days", texto: "Asignar sprint", accion: (p) => p.abrirModal("sprint") },
-  { id: "etiquetas-epica", icono: "tags", texto: "Configurar etiquetas", accion: (p) => p.abrirModal("etiquetasEpica") },
-  { id: "asignar-etiquetas", icono: "tag", texto: "Etiquetar historias", accion: (p) => p.abrirModal("asignarEtiquetas") },
+  { id: "asignar-etiquetas", icono: "tag", texto: "Etiquetas de historias", accion: (p) => void p.abrirEtiquetarHistorias() },
   { id: "editar-nombre", icono: "pencil", texto: "Editar nombre", accion: (p) => p.abrirModal("editarNombre") },
-  { id: "mover-historia", icono: "folder-symlink", texto: "Mover historia", accion: (p) => p.abrirModal("moverHistoria") },
+  { id: "mover-historia", icono: "folder-tree", texto: "Historias", accion: (p) => void p.abrirHistorias() },
   { id: "archivar-epica", icono: "archive", texto: "Archivar \xE9picas", accion: (p) => p.abrirModal("mover") },
   { id: "eliminar-epica-historia", icono: "trash-2", texto: "Eliminar \xE9pica o historia", accion: (p) => p.abrirModal("eliminarEpicaHistoria") },
   // Épicas — tableros
   { id: "roadmap", icono: "map", texto: "Roadmap", accion: (p) => void p.abrirRoadmap() },
-  { id: "gestor-funcionalidades", icono: "kanban-square", texto: "Gesti\xF3n de historias", accion: (p) => void p.abrirGestorFuncionalidades() },
+  { id: "gestor-funcionalidades", icono: "calendar-range", texto: "Planeaci\xF3n", accion: (p) => void p.abrirGestorFuncionalidades() },
   // Incidencias
-  { id: "configurar-incidencias", icono: "settings-2", texto: "Configurar incidencias", accion: (p) => p.abrirModal("configIncidencias") },
   { id: "crear-incidencia", icono: "circle-dot", texto: "Crear incidencia", accion: (p) => p.abrirModal("incidencia") },
   { id: "editar-incidencia", icono: "replace", texto: "Editar incidencia", accion: (p) => p.abrirModal("editarIncidencia") },
   { id: "eliminar-incidencia", icono: "trash-2", texto: "Eliminar incidencia", accion: (p) => p.abrirModal("eliminarIncidencia") },
   // Documentos
-  { id: "configurar-documentos", icono: "settings-2", texto: "Configurar documentos", accion: (p) => p.abrirModal("configDocumentos") },
   { id: "crear-documento", icono: "file-plus", texto: "Crear documento", accion: (p) => p.abrirModal("documento") },
   { id: "editar-documento", icono: "replace", texto: "Editar documento", accion: (p) => p.abrirModal("editarDocumento") },
   { id: "eliminar-documento", icono: "trash-2", texto: "Eliminar documento", accion: (p) => p.abrirModal("eliminarDocumento") },
-  { id: "documentos", icono: "file-text", texto: "Documentos", accion: (p) => void p.abrirDocumentos() },
-  { id: "organizar-documentos", icono: "layout-grid", texto: "Organizar documentos", accion: (p) => void p.abrirOrganizarDocumentos() },
+  { id: "documentos", icono: "file-text", texto: "Documentos por \xE9pica", accion: (p) => void p.abrirDocumentos() },
+  { id: "organizar-documentos", icono: "layout-grid", texto: "Tablero de documentos", accion: (p) => void p.abrirOrganizarDocumentos() },
   // Colaboradores
   { id: "colaboradores", icono: "users", texto: "Configurar colaboradores", accion: (p) => p.abrirModal("colaboradores") },
   { id: "asignar-colaborador", icono: "user-plus", texto: "Asignar colaborador", accion: (p) => p.abrirModal("asignar") },
@@ -2226,18 +2254,18 @@ var REGISTRO = [
 ];
 var POR_ID = new Map(REGISTRO.map((a) => [a.id, a]));
 var SECCIONES_PANEL = [
-  { id: "epicas-admin", titulo: "Administraci\xF3n", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint", "etiquetas-epica", "asignar-etiquetas"] },
-  { id: "epicas-acciones", titulo: "Acciones", acciones: ["editar-nombre", "mover-historia", "archivar-epica", "eliminar-epica-historia"] },
-  { id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "gestor-funcionalidades"] },
-  { id: "incidencias", titulo: "Incidencias", acciones: ["configurar-incidencias", "crear-incidencia"] },
-  { id: "documentos", titulo: "Documentos", acciones: ["configurar-documentos", "crear-documento", "documentos", "organizar-documentos"] },
-  { id: "incidencias-acciones", titulo: "Acciones", acciones: ["editar-incidencia", "eliminar-incidencia", "editar-documento", "eliminar-documento"] },
-  { id: "colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador", "incidencias-por-colaborador"] }
+  { id: "epicas-admin", titulo: "Administraci\xF3n", acciones: ["crear-epica", "crear-funcionalidad", "asignar-sprint"] },
+  { id: "epicas-colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
+  { id: "epicas-acciones", titulo: "Acciones", acciones: ["editar-nombre", "archivar-epica", "eliminar-epica-historia"] },
+  { id: "epicas-tableros", titulo: "Tableros", acciones: ["roadmap", "mover-historia", "asignar-etiquetas", "gestor-funcionalidades"] },
+  { id: "incidencias", titulo: "Incidencias", acciones: ["crear-incidencia", "editar-incidencia", "eliminar-incidencia"] },
+  { id: "documentos", titulo: "Documentos", acciones: ["crear-documento", "editar-documento", "eliminar-documento"] },
+  { id: "incidencias-tableros", titulo: "Tableros", acciones: ["incidencias-por-colaborador", "documentos", "organizar-documentos"] }
 ];
 var TABS = [
   { id: "favoritos", titulo: "Favoritos", secciones: [] },
-  { id: "epicas", titulo: "\xC9picas", secciones: ["epicas-admin", "epicas-acciones", "epicas-tableros"] },
-  { id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "documentos", "incidencias-acciones", "colaboradores"] }
+  { id: "epicas", titulo: "\xC9picas", secciones: ["epicas-admin", "epicas-colaboradores", "epicas-acciones", "epicas-tableros"] },
+  { id: "incidencias", titulo: "Incidencias", secciones: ["incidencias", "documentos", "incidencias-tableros"] }
 ];
 function resolverAccion(_plugin, id) {
   var _a;
@@ -2874,49 +2902,6 @@ var EditarNombreModal = class extends GestorModal {
       this.sinEpicas(epica);
   }
 };
-var MoverHistoriaModal = class extends GestorModal {
-  onOpen() {
-    this.titleEl.setText("Mover historia");
-    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
-    const epica = this.campoEpica(funcs);
-    const fn = this.campoFuncionalidad(epica);
-    const destino = this.campoSelect("Mover a la \xE9pica", "Seleccionar \xE9pica destino");
-    this.setOpciones(
-      destino.select,
-      "Seleccionar \xE9pica destino",
-      funcs.map((f) => ({ value: f.slug, label: f.nombre }))
-    );
-    this.botones(async () => {
-      var _a, _b;
-      this.limpiarError(fn);
-      this.limpiarError(destino);
-      const hist = fn.getFn();
-      const dest = (_a = funcs.find((f) => f.slug === destino.select.value)) != null ? _a : null;
-      if (!hist) {
-        this.mostrarError(fn, "Selecciona la historia a mover.");
-        return;
-      }
-      if (!dest) {
-        this.mostrarError(destino, MSG_OBLIGATORIO);
-        return;
-      }
-      if (dest.slug === ((_b = epica.getFunc()) == null ? void 0 : _b.slug)) {
-        this.mostrarError(destino, "La historia ya pertenece a esa \xE9pica.");
-        return;
-      }
-      try {
-        await moverHistoriaAEpica(this.app, hist, dest);
-        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: historia movida.");
-        this.close();
-      } catch (e) {
-        console.error(e);
-        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: no se pudo mover la historia.");
-      }
-    }, "Mover");
-    if (funcs.length === 0)
-      this.sinEpicas(epica);
-  }
-};
 var MoverIncidenciaModal = class extends GestorModal {
   constructor(plugin, cfg) {
     super(plugin);
@@ -3137,20 +3122,17 @@ var CrearIncidenciaModal = class extends GestorModal {
       "Descripci\xF3n",
       "Aparece en el cuerpo de la nota (secci\xF3n Descripci\xF3n)"
     );
-    const colabSel = /* @__PURE__ */ new Set();
+    let colabCampo = null;
     if (this.cfg.conColaboradores) {
-      const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-      colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
-      crearSelectorEtiquetas({
-        parent: colWrap.createDiv(),
-        etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
-        seleccion: colabSel,
-        textoBtn: "Asignar colaboradores\u2026",
-        textoVacio: "No hay colaboradores registrados."
-      });
+      colabCampo = this.campoSelect("Colaborador (opcional)", "Sin colaborador");
+      this.setOpciones(
+        colabCampo.select,
+        "Sin colaborador",
+        this.plugin.settings.colaboradores.filter((c) => c.visible !== false).map((c) => ({ value: c.nombre, label: c.nombre }))
+      );
     }
     this.botones(async () => {
-      var _a;
+      var _a, _b;
       this.limpiarError(func);
       this.limpiarError(tipo);
       this.limpiarError(nombre);
@@ -3195,7 +3177,8 @@ var CrearIncidenciaModal = class extends GestorModal {
           tipoNombre,
           descripcion.input.value
         );
-        await this.aplicarAsignados(file, [...colabSel]);
+        const colab = (_b = colabCampo == null ? void 0 : colabCampo.select.value) != null ? _b : "";
+        await this.aplicarAsignados(file, colab ? [colab] : []);
         this.close();
         await this.abrirNota(file);
       } catch (e) {
@@ -3628,79 +3611,6 @@ function crearSelectorEtiquetas(opts) {
   });
   renderChips();
 }
-var AsignarEtiquetasModal = class extends GestorModal {
-  onOpen() {
-    this.titleEl.setText("Etiquetar historias");
-    this.modalEl.addClass("gf-modal-sprints");
-    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
-    const epica = this.campoEpica(funcs);
-    const listaWrap = this.contentEl.createDiv({ cls: "gf-sprints-lista" });
-    let historias = [];
-    const seleccion = /* @__PURE__ */ new Map();
-    const renderLista = () => {
-      var _a;
-      listaWrap.empty();
-      const ep = epica.getFunc();
-      if (!ep) {
-        listaWrap.createEl("em", { cls: "gf-campo-aviso", text: "Selecciona una \xE9pica." });
-        return;
-      }
-      const disponibles = leerEtiquetasEpica(this.app, ep).filter((e) => e.visible !== false);
-      if (historias.length === 0) {
-        listaWrap.createEl("em", {
-          cls: "gf-campo-aviso",
-          text: "Esta \xE9pica no tiene historias a\xFAn."
-        });
-        return;
-      }
-      for (const h of historias) {
-        const fila = listaWrap.createDiv({ cls: "gf-asignet-fila" });
-        const nombreEl = fila.createSpan({ cls: "gf-asignet-nombre", text: h.nombre });
-        nombreEl.setAttr("title", h.nombre);
-        crearSelectorEtiquetas({
-          parent: fila,
-          etiquetas: disponibles,
-          seleccion: (_a = seleccion.get(h.file.path)) != null ? _a : /* @__PURE__ */ new Set()
-        });
-      }
-    };
-    const cargar = () => {
-      const ep = epica.getFunc();
-      historias = ep ? listFuncionalidadesDe(this.app, ep.folder) : [];
-      seleccion.clear();
-      for (const h of historias) {
-        seleccion.set(h.file.path, new Set(leerEtiquetasHistoria(this.app, h.file)));
-      }
-      renderLista();
-      this.crearBtn.disabled = !ep;
-    };
-    this.botones(async () => {
-      var _a;
-      this.limpiarError(epica);
-      const ep = epica.getFunc();
-      if (!ep) {
-        this.mostrarError(epica, MSG_OBLIGATORIO);
-        return;
-      }
-      try {
-        for (const h of historias) {
-          await guardarEtiquetasHistoria(this.app, h.file, [
-            ...(_a = seleccion.get(h.file.path)) != null ? _a : []
-          ]);
-        }
-        this.close();
-      } catch (e) {
-        console.error(e);
-        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: error al guardar las etiquetas.");
-      }
-    }, "Guardar");
-    this.crearBtn.disabled = true;
-    epica.select.addEventListener("change", () => cargar());
-    renderLista();
-    if (funcs.length === 0)
-      this.sinEpicas(epica);
-  }
-};
 var CrearPendienteModal = class extends CrearFechadoModal {
   constructor() {
     super(...arguments);
@@ -3917,146 +3827,71 @@ var MoverEpicaModal = class extends GestorModal {
 var AsignarColaboradorModal = class extends GestorModal {
   constructor() {
     super(...arguments);
-    this.seleccionados = /* @__PURE__ */ new Set();
-    this.filas = [];
+    this.seleccion = /* @__PURE__ */ new Set();
   }
   onOpen() {
     this.titleEl.setText("Asignar colaborador");
-    this.modalEl.addClass("gf-modal-sprints");
     const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
     const epica = this.campoEpica(funcs);
     const fn = this.campoFuncionalidad(epica);
-    const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-    colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
-    crearSelectorEtiquetas({
-      parent: colWrap.createDiv(),
-      etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
-      seleccion: this.seleccionados,
-      textoBtn: "Asignar colaboradores\u2026",
-      textoVacio: "No hay colaboradores registrados.",
-      onChange: () => {
-        refrescarChecks();
-        actualizarBoton();
-      }
-    });
-    let tipoFiltro = "";
-    const tipoWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-    tipoWrap.createEl("label", { text: "Tipo de incidencia", cls: "gf-campo-label" });
-    const tipoSel = tipoWrap.createEl("select", { cls: "dropdown gf-campo-select" });
-    tipoSel.createEl("option", { text: "Todos", value: "" });
-    for (const i of this.plugin.settings.incidencias) {
-      tipoSel.createEl("option", { text: i.nombre, value: i.nombre });
-    }
-    tipoSel.addEventListener("change", () => {
-      tipoFiltro = tipoSel.value;
-      renderIncidencias();
-      actualizarBoton();
-    });
-    const listaWrap = this.contentEl.createDiv({ cls: "gf-sprints-lista" });
-    const actualizarBoton = () => {
-      this.crearBtn.disabled = !epica.getFunc() || this.seleccionados.size === 0;
-    };
-    const refrescarChecks = () => {
-      for (const fila of this.filas) {
-        const asignados = getAsignados(this.app, fila.file);
-        fila.chk.checked = this.seleccionados.size > 0 && [...this.seleccionados].every((c) => asignados.includes(c));
-      }
-    };
-    const colorTipo = (nombre) => {
+    const colaboradores = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
+    const wrap = this.contentEl.createDiv({ cls: "gf-campo" });
+    wrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
+    const selCont = wrap.createDiv();
+    const aviso = this.contentEl.createDiv({ cls: "gf-campo-aviso" });
+    const objetivo = () => {
       var _a, _b;
-      return (_b = (_a = this.plugin.settings.incidencias.find((i) => i.nombre === nombre)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
+      return (_b = (_a = fn.getFn()) != null ? _a : epica.getFunc()) != null ? _b : null;
     };
-    const renderIncidencias = () => {
-      listaWrap.empty();
-      this.filas = [];
-      const f = epica.getFunc();
-      if (!f)
-        return;
-      const seleccionFn = fn.getFn();
-      const objetivoPrincipal = seleccionFn != null ? seleccionFn : f;
-      const filaPpal = listaWrap.createDiv({ cls: "gf-sprint-fila" });
-      const cabPpal = filaPpal.createDiv({ cls: "gf-sprint-cabecera" });
-      const chkPpal = cabPpal.createEl("input", { type: "checkbox" });
-      cabPpal.createEl("span", {
-        text: seleccionFn ? `Historia: ${seleccionFn.nombre}` : `\xC9pica: ${f.nombre}`,
-        cls: "gf-sprint-nombre"
+    const reconstruir = () => {
+      selCont.empty();
+      crearSelectorEtiquetas({
+        parent: selCont,
+        etiquetas: colaboradores,
+        seleccion: this.seleccion,
+        textoBtn: "Asignar colaboradores\u2026",
+        textoVacio: "No hay colaboradores registrados."
       });
-      this.filas.push({ file: objetivoPrincipal.file, chk: chkPpal });
-      const tipos = this.plugin.settings.incidencias;
-      const filtrar = (incs) => tipoFiltro ? incs.filter((i) => i.tipoNombre === tipoFiltro) : incs;
-      const grupos = [];
-      if (seleccionFn) {
-        grupos.push({
-          origen: "",
-          incidencias: filtrar(listIncidencias(this.app, seleccionFn, tipos))
-        });
-      } else {
-        grupos.push({ origen: "", incidencias: filtrar(listIncidencias(this.app, f, tipos)) });
-        for (const hija of listFuncionalidadesDe(this.app, f.folder)) {
-          grupos.push({
-            origen: hija.nombre,
-            incidencias: filtrar(listIncidencias(this.app, hija, tipos))
-          });
-        }
-      }
-      const total = grupos.reduce((n, g) => n + g.incidencias.length, 0);
-      if (total === 0) {
-        listaWrap.createEl("em", {
-          cls: "gf-campo-aviso",
-          text: seleccionFn ? "Esta historia no tiene incidencias a\xFAn." : "Esta \xE9pica no tiene incidencias a\xFAn."
-        });
-      }
-      for (const grupo of grupos) {
-        for (const inc of grupo.incidencias) {
-          const fila = listaWrap.createDiv({ cls: "gf-sprint-fila" });
-          const cabecera = fila.createDiv({ cls: "gf-sprint-cabecera" });
-          if (inc.nivel > 0)
-            cabecera.addClass("gf-incidencia-sub");
-          const chk = cabecera.createEl("input", { type: "checkbox" });
-          renderChipEtiqueta(cabecera, inc.tipoNombre, colorTipo(inc.tipoNombre));
-          cabecera.createEl("span", { text: inc.nombre, cls: "gf-sprint-nombre" });
-          if (grupo.origen) {
-            cabecera.createEl("span", { text: grupo.origen, cls: "gf-campo-aviso" });
-          }
-          this.filas.push({ file: inc.file, chk });
-        }
-      }
-      refrescarChecks();
     };
-    this.botones(async () => {
-      const f = epica.getFunc();
-      if (!f || this.seleccionados.size === 0)
-        return;
-      try {
-        for (const fila of this.filas) {
-          const previos = getAsignados(this.app, fila.file);
-          const actuales = new Set(previos);
-          if (fila.chk.checked) {
-            for (const c of this.seleccionados)
-              actuales.add(c);
-          } else {
-            for (const c of this.seleccionados)
-              actuales.delete(c);
-          }
-          if (actuales.size === previos.length && previos.every((p) => actuales.has(p))) {
-            continue;
-          }
-          await this.app.fileManager.processFrontMatter(fila.file, (fm) => {
-            fm.asignados = [...actuales].sort((a, b) => a.localeCompare(b, "es"));
-          });
+    const sincronizar = () => {
+      const o = objetivo();
+      this.seleccion.clear();
+      if (o) {
+        for (const c of getAsignados(this.app, o.file)) {
+          if (colaboradores.some((x) => x.nombre === c))
+            this.seleccion.add(c);
         }
+      }
+      aviso.setText(
+        o ? fn.getFn() ? `Se asignar\xE1n a la historia "${o.nombre}".` : `Se asignar\xE1n a la \xE9pica "${o.nombre}".` : "Selecciona una \xE9pica o historia."
+      );
+      reconstruir();
+      this.crearBtn.disabled = !o;
+    };
+    epica.select.addEventListener("change", sincronizar);
+    fn.select.addEventListener("change", sincronizar);
+    this.botones(async () => {
+      const o = objetivo();
+      if (!o) {
+        this.mostrarError(epica, MSG_OBLIGATORIO);
+        return;
+      }
+      try {
+        const arr = [...this.seleccion].sort((a, b) => a.localeCompare(b, "es"));
+        await this.app.fileManager.processFrontMatter(o.file, (fm) => {
+          if (arr.length > 0)
+            fm.asignados = arr;
+          else
+            delete fm.asignados;
+        });
+        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: colaboradores asignados.");
         this.close();
-        new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: asignaciones guardadas.");
       } catch (e) {
         console.error(e);
         new import_obsidian8.Notice("Gesti\xF3n de \xE9picas: error al guardar las asignaciones.");
       }
     }, "Guardar");
-    this.crearBtn.disabled = true;
-    fn.select.addEventListener("change", () => {
-      renderIncidencias();
-      actualizarBoton();
-    });
+    sincronizar();
     if (funcs.length === 0) {
       this.sinEpicas(epica);
     }
@@ -4076,27 +3911,6 @@ var CrearFuncionalidadNuevaModal = class extends GestorModal {
       "Nombre de la historia",
       "Escribe nombre de la historia"
     );
-    const seleccion = /* @__PURE__ */ new Set();
-    const etqWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-    etqWrap.createEl("label", { text: "Asignar etiquetas", cls: "gf-campo-label" });
-    const etqCont = etqWrap.createDiv();
-    const refrescarEtiquetas = () => {
-      etqCont.empty();
-      const ep = epica.getFunc();
-      const disponibles = ep ? leerEtiquetasEpica(this.app, ep).filter((e) => e.visible !== false) : [];
-      for (const n of [...seleccion]) {
-        if (!disponibles.some((e) => e.nombre === n))
-          seleccion.delete(n);
-      }
-      crearSelectorEtiquetas({
-        parent: etqCont,
-        etiquetas: disponibles,
-        seleccion,
-        textoBtn: "Asignar etiquetas\u2026"
-      });
-    };
-    epica.select.addEventListener("change", refrescarEtiquetas);
-    refrescarEtiquetas();
     const colabSel = /* @__PURE__ */ new Set();
     const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
     colWrap.createEl("label", { text: "Asignar colaboradores", cls: "gf-campo-label" });
@@ -4133,9 +3947,6 @@ var CrearFuncionalidadNuevaModal = class extends GestorModal {
         return;
       try {
         const file = await createFuncionalidadEn(this.app, f, valor);
-        if (seleccion.size > 0) {
-          await guardarEtiquetasHistoria(this.app, file, [...seleccion]);
-        }
         await this.aplicarAsignados(file, [...colabSel]);
         if (this.crearNuevo) {
           new import_obsidian8.Notice(`Gesti\xF3n de \xE9picas: historia "${valor}" creada.`);
@@ -4304,6 +4115,8 @@ var KanbanView = class extends import_obsidian9.ItemView {
     super(leaf);
     this.renderTimer = null;
     this.cards = [];
+    /** Scroll horizontal del tablero, para conservarlo entre repintados. */
+    this.scrollLeft = 0;
     /** Filtros (no se persisten): por tipo de incidencia y por colaborador. */
     this.filtroTipos = /* @__PURE__ */ new Set();
     this.filtroColab = /* @__PURE__ */ new Set();
@@ -4499,6 +4312,10 @@ var KanbanView = class extends import_obsidian9.ItemView {
   }
   renderBoard(cont) {
     const board = cont.createDiv({ cls: "gf-kanban-board" });
+    habilitarScrollHorizontal(board);
+    board.addEventListener("scroll", () => {
+      this.scrollLeft = board.scrollLeft;
+    });
     const carriles = this.carrilesVisibles();
     if (carriles.length === 0) {
       board.createDiv({
@@ -4536,6 +4353,7 @@ var KanbanView = class extends import_obsidian9.ItemView {
       for (const card of tarjetas)
         this.renderTarjeta(cuerpo, card, carril);
     }
+    board.scrollLeft = this.scrollLeft;
   }
   renderTarjeta(cuerpo, card, carrilActual) {
     const el = cuerpo.createDiv({ cls: "gf-kanban-card" });
@@ -4656,7 +4474,10 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.renderTimer = null;
-    this.epicaSlug = "";
+    /** Épicas seleccionadas (slugs). Por defecto, las que tienen sprints. */
+    this.epicaSlugs = /* @__PURE__ */ new Set();
+    /** Si ya se aplicó la selección por defecto de épicas. */
+    this.epicaInit = false;
     this.anio = (/* @__PURE__ */ new Date()).getFullYear();
     /** Filtro por etiqueta (nombres seleccionados). */
     this.filtro = /* @__PURE__ */ new Set();
@@ -4664,22 +4485,27 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
     this.filtroColab = /* @__PURE__ */ new Set();
     this.epicas = [];
     this.historias = [];
-    /** Números de sprint que la épica tiene asignados en el año visible. */
-    this.sprintsEpica = [];
-    /** Etiquetas (visibles) definidas en la épica. */
+    /** Scroll horizontal del tablero, para conservarlo entre repintados. */
+    this.scrollLeft = 0;
+    /** Etiquetas (visibles) de las épicas seleccionadas, para el filtro. */
     this.etiquetasEpica = [];
+    /** Mapa nombre de etiqueta → color (unión de las épicas seleccionadas). */
+    this.colorEtiqueta = /* @__PURE__ */ new Map();
     this.plugin = plugin;
-    this.desde = Math.min(Math.max(plugin.settings.sprintActual.sprint, 1), plugin.settings.numSprints);
+    this.desde = Math.min(
+      Math.max(plugin.settings.sprintActual.sprint - 2, 1),
+      plugin.settings.numSprints
+    );
     this.hasta = plugin.settings.numSprints;
   }
   getViewType() {
     return VIEW_TYPE_GESTOR_FN;
   }
   getDisplayText() {
-    return "Gesti\xF3n de historias \u2014 Gesti\xF3n de \xE9picas";
+    return "Planeaci\xF3n \u2014 Gesti\xF3n de \xE9picas";
   }
   getIcon() {
-    return "puzzle";
+    return "calendar-range";
   }
   async onOpen() {
     const refrescar = (file) => {
@@ -4705,33 +4531,55 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
       void this.recargar();
     }, 150);
   }
-  epicaActual() {
-    var _a;
-    return (_a = this.epicas.find((e) => e.slug === this.epicaSlug)) != null ? _a : null;
+  epicasSeleccionadas() {
+    return this.epicas.filter((e) => this.epicaSlugs.has(e.slug));
   }
   async recolectar() {
+    var _a;
     const admin = this.plugin.settings.carpetaAdmin.trim();
     this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
     this.historias = [];
-    this.sprintsEpica = [];
     this.etiquetasEpica = [];
-    const ep = this.epicaActual();
-    if (!ep)
-      return;
-    const sprints = (await leerSprints(this.app, ep)).filter((s) => s.anio === this.anio);
-    this.sprintsEpica = [...new Set(sprints.map((s) => s.sprint))].sort((a, b) => a - b);
-    this.etiquetasEpica = leerEtiquetasEpica(this.app, ep).filter((e) => e.visible !== false);
-    for (const h of listFuncionalidadesDe(this.app, ep.folder)) {
-      const asign = leerSprintHistoria(this.app, h.file);
-      const sprint = asign && asign.anio === this.anio ? asign.sprint : null;
-      this.historias.push({
-        file: h.file,
-        nombre: h.nombre,
-        etiquetas: leerEtiquetasHistoria(this.app, h.file),
-        colaboradores: getAsignados(this.app, h.file),
-        sprint
-      });
+    this.colorEtiqueta = /* @__PURE__ */ new Map();
+    if (!this.epicaInit) {
+      this.epicaInit = true;
+      for (const ep of this.epicas) {
+        const sprints = await leerSprints(this.app, ep);
+        if (sprints.length > 0)
+          this.epicaSlugs.add(ep.slug);
+      }
     }
+    const vivos = new Set(this.epicas.map((e) => e.slug));
+    for (const slug of [...this.epicaSlugs])
+      if (!vivos.has(slug))
+        this.epicaSlugs.delete(slug);
+    const seleccionadas = this.epicasSeleccionadas();
+    if (seleccionadas.length === 0)
+      return;
+    const etiquetasVistas = /* @__PURE__ */ new Map();
+    for (const ep of seleccionadas) {
+      for (const et of leerEtiquetasEpica(this.app, ep).filter((e) => e.visible !== false)) {
+        if (!etiquetasVistas.has(et.nombre))
+          etiquetasVistas.set(et.nombre, et);
+        if (!this.colorEtiqueta.has(et.nombre))
+          this.colorEtiqueta.set(et.nombre, et.color);
+      }
+      for (const h of listFuncionalidadesDe(this.app, ep.folder)) {
+        const asign = leerSprintHistoria(this.app, h.file);
+        const sprint = asign && asign.anio === this.anio ? asign.sprint : null;
+        this.historias.push({
+          file: h.file,
+          nombre: h.nombre,
+          epicaSlug: ep.slug,
+          epicaNombre: ep.nombre,
+          etiquetas: leerEtiquetasHistoria(this.app, h.file),
+          colaboradores: getAsignados(this.app, h.file),
+          estado: normalizarEstado((_a = h.estado) != null ? _a : ""),
+          sprint
+        });
+      }
+    }
+    this.etiquetasEpica = [...etiquetasVistas.values()];
   }
   render() {
     const cont = this.contentEl;
@@ -4747,16 +4595,16 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
       return;
     }
     const barra = cont.createDiv({ cls: "gf-roadmap-controles" });
-    barra.createEl("span", { text: "\xC9pica", cls: "gf-roadmap-lbl" });
-    const epicaSel = barra.createEl("select", { cls: "dropdown" });
-    epicaSel.createEl("option", { text: "Seleccionar \xE9pica", value: "" });
-    for (const ep of this.epicas)
-      epicaSel.createEl("option", { text: ep.nombre, value: ep.slug });
-    epicaSel.value = this.epicaSlug;
-    epicaSel.addEventListener("change", () => {
-      this.epicaSlug = epicaSel.value;
-      this.filtro.clear();
-      void this.recargar();
+    barra.createEl("span", { text: "\xC9picas", cls: "gf-roadmap-lbl" });
+    crearMultiSelect({
+      parent: barra,
+      etiqueta: "\xC9picas",
+      opciones: this.epicas.map((e) => ({ valor: e.slug, texto: e.nombre })),
+      seleccion: this.epicaSlugs,
+      onChange: () => {
+        this.filtro.clear();
+        void this.recargar();
+      }
     });
     barra.createEl("span", { text: "A\xF1o", cls: "gf-roadmap-lbl" });
     const anioBtn = barra.createEl("button", { cls: "gf-multiselect-btn", text: `${this.anio} \u25BE` });
@@ -4806,7 +4654,7 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
         pintarBoard();
       }
     });
-    if (this.epicaActual()) {
+    if (this.epicasSeleccionadas().length > 0) {
       barra.createEl("span", { text: "Etiquetas", cls: "gf-roadmap-lbl" });
       crearSelectorEtiquetas({
         parent: barra,
@@ -4834,18 +4682,24 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
     const recargar = barra.createEl("button", { text: "Recargar", cls: "gf-recargar-btn" });
     recargar.setAttr("title", "Releer las notas desde el disco");
     recargar.addEventListener("click", () => void this.recargar());
-    if (!this.epicaActual()) {
-      cont.createDiv({ cls: "gf-kanban-vacio", text: "Selecciona una \xE9pica." });
+    if (this.epicasSeleccionadas().length === 0) {
+      cont.createDiv({ cls: "gf-kanban-vacio", text: "Selecciona al menos una \xE9pica." });
       return;
     }
     pintarBoard();
   }
   renderBoard(cont) {
     const board = cont.createDiv({ cls: "gf-kanban-board" });
+    habilitarScrollHorizontal(board);
+    board.addEventListener("scroll", () => {
+      this.scrollLeft = board.scrollLeft;
+    });
     const columnas = [
-      { titulo: "Sin sprint", sprint: null },
-      ...this.sprintsEpica.filter((n) => n >= this.desde && n <= this.hasta).map((n) => ({ titulo: `Sprint ${n}`, sprint: n }))
+      { titulo: "Sin sprint", sprint: null }
     ];
+    for (let n = this.desde; n <= this.hasta; n++) {
+      columnas.push({ titulo: `Sprint ${n}`, sprint: n });
+    }
     const filtradas = this.historias.filter(
       (h) => (this.filtro.size === 0 || h.etiquetas.some((e) => this.filtro.has(e))) && (this.filtroColab.size === 0 || h.colaboradores.some((c) => this.filtroColab.has(c)))
     );
@@ -4871,13 +4725,26 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
       for (const card of tarjetas)
         this.renderTarjeta(cuerpo, card, col.sprint);
     }
+    board.scrollLeft = this.scrollLeft;
   }
   colorColab(nombre) {
     var _a, _b;
     return (_b = (_a = this.plugin.settings.colaboradores.find((c) => c.nombre === nombre)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
   }
+  /** Pide confirmación y marca la historia como completada / por hacer. */
+  confirmarEstado(card, completar) {
+    const [titulo, mensaje, ok] = completar ? ["Marcar como hecha", "\xBFMarcar esta historia como hecha? Su estado pasar\xE1 a completado.", "Marcar como hecha"] : ["Marcar como pendiente", "\xBFQuitar el estado de completado de esta historia? Volver\xE1 a Por hacer.", "Marcar como pendiente"];
+    new ConfirmacionModal(this.plugin, titulo, mensaje, ok, async () => {
+      const estado = completar ? "completado" : "por-hacer";
+      await this.app.fileManager.processFrontMatter(card.file, (fm) => {
+        fm.estado = estado;
+      });
+      card.estado = estado;
+      this.render();
+    }).open();
+  }
   renderTarjeta(cuerpo, card, sprintCol) {
-    var _a, _b;
+    var _a;
     const el = cuerpo.createDiv({ cls: "gf-kanban-card" });
     el.draggable = true;
     el.addEventListener("dragstart", (e) => {
@@ -4902,12 +4769,24 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
         void this.soltar(payload.path, sprintCol, card.file.path);
       }
     });
-    el.createDiv({ cls: "gf-kanban-card-nombre", text: card.nombre });
+    const completado = card.estado === "completado";
+    if (completado)
+      el.addClass("gf-kanban-card-hecha");
+    const head = el.createDiv({ cls: "gf-kanban-card-head" });
+    const chk = head.createEl("input", { type: "checkbox", cls: "gf-colab-chk" });
+    chk.checked = completado;
+    chk.addEventListener("click", (e) => e.stopPropagation());
+    chk.addEventListener("change", () => {
+      const quiere = chk.checked;
+      chk.checked = !quiere;
+      this.confirmarEstado(card, quiere);
+    });
+    head.createDiv({ cls: "gf-kanban-card-nombre", text: card.nombre });
+    el.createDiv({ cls: "gf-kanban-card-func", text: card.epicaNombre });
     if (card.etiquetas.length > 0 || card.colaboradores.length > 0) {
       const chips = el.createDiv({ cls: "gf-kanban-card-chips" });
       for (const n of card.etiquetas) {
-        const color = (_b = (_a = this.etiquetasEpica.find((e) => e.nombre === n)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
-        renderChipEtiqueta(chips, n, color);
+        renderChipEtiqueta(chips, n, (_a = this.colorEtiqueta.get(n)) != null ? _a : "#B9BEC6");
       }
       for (const c of card.colaboradores) {
         renderChipEtiqueta(chips, c, this.colorColab(c));
@@ -4961,7 +4840,7 @@ var GestorFuncionalidadesView = class extends import_obsidian10.ItemView {
       await guardarSprintHistoria(this.app, h.file, sprint, this.anio);
     }
     await this.plugin.saveSettings();
-    await this.recargar();
+    this.render();
   }
 };
 function leerPayload2(e) {
@@ -4985,6 +4864,8 @@ var RoadmapView = class extends import_obsidian11.ItemView {
     this.anio = (/* @__PURE__ */ new Date()).getFullYear();
     /** Filtro por colaborador (nombres seleccionados); vacío = todos. */
     this.filtroColab = /* @__PURE__ */ new Set();
+    /** Mostrar también las épicas sin sprints asignados (del año seleccionado). */
+    this.verTodas = false;
     this.plugin = plugin;
     this.desde = Math.min(Math.max(plugin.settings.sprintActual.sprint, 1), plugin.settings.numSprints);
     this.hasta = plugin.settings.numSprints;
@@ -5007,9 +4888,12 @@ var RoadmapView = class extends import_obsidian11.ItemView {
     if (!admin)
       return filas;
     const agregar = async (ref, tipo, epicaSlug, etiqueta) => {
-      const sprints = (await leerSprints(this.app, ref)).filter((s) => s.anio === this.anio);
-      if (sprints.length === 0)
-        return;
+      const todos = await leerSprints(this.app, ref);
+      const sprints = todos.filter((s) => s.anio === this.anio);
+      if (sprints.length === 0) {
+        if (!this.verTodas || tipo !== "epica" || todos.length > 0)
+          return;
+      }
       const porSprint = /* @__PURE__ */ new Map();
       for (const s of sprints) {
         porSprint.set(s.sprint, { etiquetas: s.etiquetas });
@@ -5082,6 +4966,14 @@ var RoadmapView = class extends import_obsidian11.ItemView {
       textoVacio: "No hay colaboradores registrados.",
       onChange: () => pintarTabla()
     });
+    const verLabel = barra.createEl("label", { cls: "gf-chk" });
+    const verChk = verLabel.createEl("input", { type: "checkbox" });
+    verChk.checked = this.verTodas;
+    verLabel.appendText(" Ver todas las \xE9picas");
+    verChk.addEventListener("change", () => {
+      this.verTodas = verChk.checked;
+      void this.render();
+    });
     const borrar = barra.createEl("button", { text: "Borrar filtros", cls: "gf-roadmap-recargar" });
     borrar.addEventListener("click", () => {
       this.filtroColab.clear();
@@ -5103,6 +4995,7 @@ var RoadmapView = class extends import_obsidian11.ItemView {
         return;
       }
       const wrap = tablaCont.createDiv({ cls: "gf-roadmap-tabla-wrap" });
+      habilitarScrollHorizontal(wrap);
       const tabla = wrap.createEl("table", { cls: "gf-roadmap-tabla" });
       const trh = tabla.createEl("thead").createEl("tr");
       trh.createEl("th", { text: "\xC9pica", cls: "gf-roadmap-th-epica" });
@@ -5196,7 +5089,7 @@ var CONFIG_INCIDENCIAS = {
 };
 var CONFIG_DOCUMENTOS = {
   viewType: VIEW_TYPE_DOCUMENTOS,
-  titulo: "Documentos",
+  titulo: "Documentos por \xE9pica",
   icon: "file-text",
   registro: (p) => p.settings.documentos,
   incluyeTareasPendientes: false,
@@ -5219,7 +5112,8 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     this.epicaConocidas = /* @__PURE__ */ new Set();
     /** Mostrar incidencias completadas (tachadas). Marcado por defecto. */
     this.verCompletadas = true;
-    /** Arrastre en curso (reordenar tarjetas de colaborador o incidencias). */
+    /** Arrastre en curso (reordenar tarjetas de colaborador o incidencias). Para
+     * items, `origen` es el grupo (colaborador) desde el que se arrastra. */
     this.arrastre = null;
     /** Grupos a pintar (por colaborador o por épica/historia, según config). */
     this.grupos = [];
@@ -5323,6 +5217,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       porColaborador.set(colab.nombre, []);
     const sinAsignar = [];
     const porContexto = /* @__PURE__ */ new Map();
+    const refPorContexto = /* @__PURE__ */ new Map();
     const maxSprints = this.plugin.settings.numSprints;
     const filtrar = !(this.desde === 1 && this.hasta === maxSprints);
     const anio = (/* @__PURE__ */ new Date()).getFullYear();
@@ -5332,6 +5227,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     };
     const recoger = (ref, contexto, epicaNombre) => {
       var _a2, _b2;
+      refPorContexto.set(contexto, ref);
       if (!this.epicaConocidas.has(epicaNombre)) {
         this.epicaConocidas.add(epicaNombre);
         this.epicaSeleccion.add(epicaNombre);
@@ -5385,6 +5281,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
           clave,
           conProgreso: false,
           filtroClave: clave,
+          ref: refPorContexto.get(clave),
           items: (_a = porContexto.get(clave)) != null ? _a : []
         });
       }
@@ -5443,7 +5340,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
         if (items.length === 0 && grupo.filtroClave === SIN_ASIGNAR)
           continue;
         const dragClave = grupo.filtroClave && grupo.filtroClave !== SIN_ASIGNAR ? grupo.filtroClave : void 0;
-        this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso, dragClave);
+        this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso, dragClave, grupo.filtroClave, grupo.ref);
         algo = true;
       }
       if (!algo) {
@@ -5548,14 +5445,48 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     var _a, _b;
     return (_b = (_a = this.cfg.registro(this.plugin).find((i) => i.nombre === nombre)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
   }
-  renderTarjetaGrupo(cuerpo, titulo, incidencias, color, conProgreso, dragClave) {
+  renderTarjetaGrupo(cuerpo, titulo, incidencias, color, conProgreso, dragClave, grupoFiltro, ref) {
+    var _a, _b;
+    const reasignable = this.cfg.agruparPor === "colaborador";
     const tarjeta = cuerpo.createDiv({ cls: "gf-colab-card" });
+    if (reasignable) {
+      tarjeta.addEventListener("dragover", (e) => {
+        var _a2;
+        if (((_a2 = this.arrastre) == null ? void 0 : _a2.tipo) !== "item" || this.arrastre.origen === grupoFiltro)
+          return;
+        e.preventDefault();
+        tarjeta.addClass("gf-drop-card");
+      });
+      tarjeta.addEventListener("dragleave", () => tarjeta.removeClass("gf-drop-card"));
+      tarjeta.addEventListener("drop", (e) => {
+        var _a2;
+        if (((_a2 = this.arrastre) == null ? void 0 : _a2.tipo) !== "item" || this.arrastre.origen === grupoFiltro)
+          return;
+        e.preventDefault();
+        tarjeta.removeClass("gf-drop-card");
+        this.confirmarReasignar(this.arrastre.valor, grupoFiltro);
+      });
+    }
     const head = tarjeta.createDiv({ cls: "gf-colab-head" });
     if (color) {
       const punto = head.createDiv({ cls: "gf-colab-punto" });
       punto.setCssStyles({ backgroundColor: color });
     }
-    head.createEl("span", { text: titulo, cls: "gf-colab-nombre" });
+    if (ref) {
+      const tituloEl = head.createEl("a", { text: titulo, cls: "gf-colab-nombre internal-link" });
+      tituloEl.addEventListener("click", (e) => {
+        e.preventDefault();
+        void this.plugin.mostrarNota(ref.file);
+      });
+      for (const c of getAsignados(this.app, ref.file).filter(
+        (n) => this.plugin.settings.colaboradores.some((x) => x.nombre === n && x.visible !== false)
+      )) {
+        const colColor = (_b = (_a = this.plugin.settings.colaboradores.find((x) => x.nombre === c)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
+        renderChipEtiqueta(head, c, colColor);
+      }
+    } else {
+      head.createEl("span", { text: titulo, cls: "gf-colab-nombre" });
+    }
     if (dragClave) {
       head.addClass("gf-arrastrable");
       head.draggable = true;
@@ -5566,16 +5497,16 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
         this.arrastre = null;
       });
       tarjeta.addEventListener("dragover", (e) => {
-        var _a;
-        if (((_a = this.arrastre) == null ? void 0 : _a.tipo) !== "grupo")
+        var _a2;
+        if (((_a2 = this.arrastre) == null ? void 0 : _a2.tipo) !== "grupo")
           return;
         e.preventDefault();
         tarjeta.addClass("gf-drop-card");
       });
       tarjeta.addEventListener("dragleave", () => tarjeta.removeClass("gf-drop-card"));
       tarjeta.addEventListener("drop", (e) => {
-        var _a;
-        if (((_a = this.arrastre) == null ? void 0 : _a.tipo) !== "grupo")
+        var _a2;
+        if (((_a2 = this.arrastre) == null ? void 0 : _a2.tipo) !== "grupo")
           return;
         e.preventDefault();
         tarjeta.removeClass("gf-drop-card");
@@ -5610,15 +5541,15 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
           li.draggable = true;
           li.addClass("gf-arrastrable");
           li.addEventListener("dragstart", (e) => {
-            this.arrastre = { tipo: "item", valor: inc.file.path };
+            this.arrastre = { tipo: "item", valor: inc.file.path, origen: grupoFiltro };
             e.stopPropagation();
           });
           li.addEventListener("dragend", () => {
             this.arrastre = null;
           });
           li.addEventListener("dragover", (e) => {
-            var _a;
-            if (((_a = this.arrastre) == null ? void 0 : _a.tipo) !== "item")
+            var _a2;
+            if (((_a2 = this.arrastre) == null ? void 0 : _a2.tipo) !== "item")
               return;
             e.preventDefault();
             e.stopPropagation();
@@ -5626,15 +5557,18 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
           });
           li.addEventListener("dragleave", () => li.removeClass("gf-drop-card"));
           li.addEventListener("drop", (e) => {
-            var _a;
-            if (((_a = this.arrastre) == null ? void 0 : _a.tipo) !== "item")
+            var _a2;
+            if (((_a2 = this.arrastre) == null ? void 0 : _a2.tipo) !== "item")
               return;
             e.preventDefault();
             e.stopPropagation();
             li.removeClass("gf-drop-card");
             const origen = this.arrastre.valor;
-            if (origen !== inc.file.path)
+            if (reasignable && this.arrastre.origen !== grupoFiltro) {
+              this.confirmarReasignar(origen, grupoFiltro);
+            } else if (origen !== inc.file.path) {
               void this.moverItem(origen, inc.file.path);
+            }
           });
         }
         if (this.cfg.conMarcarHecha) {
@@ -5764,6 +5698,32 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     await this.plugin.saveSettings();
     await this.recargar();
   }
+  /** Pide confirmación y reasigna (reemplaza) la incidencia al colaborador del
+   * carril destino; si el destino es "Sin asignar", la deja sin colaboradores. */
+  confirmarReasignar(path, destino) {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof import_obsidian12.TFile))
+      return;
+    const colaborador = !destino || destino === SIN_ASIGNAR ? null : destino;
+    const mensaje = colaborador ? `\xBFReasignar esta incidencia a "${colaborador}"? Se reemplazar\xE1n los colaboradores que tenga asignados.` : "\xBFQuitar el colaborador asignado a esta incidencia?";
+    new ConfirmacionModal2(
+      this.app,
+      "Reasignar incidencia",
+      mensaje,
+      colaborador ? "Reasignar" : "Quitar colaborador",
+      () => void this.reasignar(file, colaborador),
+      () => {
+      }
+    ).open();
+  }
+  async reasignar(file, colaborador) {
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      if (colaborador)
+        fm.asignados = [colaborador];
+      else
+        delete fm.asignados;
+    });
+  }
 };
 var ConfirmacionModal2 = class extends import_obsidian12.Modal {
   constructor(app, titulo, mensaje, textoOk, onOk, onCancel) {
@@ -5815,7 +5775,7 @@ var OrganizarDocumentosView = class extends import_obsidian13.ItemView {
     return VIEW_TYPE_ORGANIZAR_DOCS;
   }
   getDisplayText() {
-    return "Organizar documentos \u2014 Gesti\xF3n de \xE9picas";
+    return "Tablero de documentos \u2014 Gesti\xF3n de \xE9picas";
   }
   getIcon() {
     return "layout-grid";
@@ -5923,7 +5883,7 @@ var OrganizarDocumentosView = class extends import_obsidian13.ItemView {
     if (!carpetasGestionListas(this.app)) {
       const aviso = cont.createDiv({ cls: "gf-kanban-aviso" });
       aviso.createEl("p", {
-        text: "Crea las carpetas de gesti\xF3n desde el panel de acciones antes de organizar documentos."
+        text: "Crea las carpetas de gesti\xF3n desde el panel de acciones antes de usar el Tablero de documentos."
       });
       const btn = aviso.createEl("button", { text: "Abrir panel de acciones", cls: "mod-cta" });
       btn.addEventListener("click", () => void this.plugin.abrirAcciones());
@@ -6151,6 +6111,456 @@ var NombreCarrilModal = class extends import_obsidian13.Modal {
   }
 };
 
+// src/historias.ts
+var import_obsidian14 = require("obsidian");
+var VIEW_TYPE_HISTORIAS = "gestor-funciones-historias";
+var HistoriasView = class extends import_obsidian14.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.renderTimer = null;
+    this.grupos = [];
+    /** Historia en arrastre: ruta de su nota y slug de su épica de origen. */
+    this.arrastre = null;
+    this.plugin = plugin;
+  }
+  getViewType() {
+    return VIEW_TYPE_HISTORIAS;
+  }
+  getDisplayText() {
+    return "Historias \u2014 Gesti\xF3n de \xE9picas";
+  }
+  getIcon() {
+    return "folder-tree";
+  }
+  async onOpen() {
+    const refrescar = (file) => {
+      const admin = (0, import_obsidian14.normalizePath)(this.plugin.settings.carpetaAdmin.trim() || "/");
+      if (file.path === admin || file.path.startsWith(admin + "/"))
+        this.renderSoon();
+    };
+    this.registerEvent(this.app.vault.on("create", refrescar));
+    this.registerEvent(this.app.vault.on("delete", refrescar));
+    this.registerEvent(this.app.vault.on("rename", refrescar));
+    this.recargar();
+  }
+  recargar() {
+    this.recolectar();
+    this.render();
+  }
+  renderSoon() {
+    if (this.renderTimer !== null)
+      window.clearTimeout(this.renderTimer);
+    this.renderTimer = window.setTimeout(() => {
+      this.renderTimer = null;
+      this.recargar();
+    }, 150);
+  }
+  recolectar() {
+    const admin = this.plugin.settings.carpetaAdmin.trim();
+    const epicas = admin ? listFuncionalidades(this.app, admin) : [];
+    this.grupos = epicas.map((epica) => ({
+      epica,
+      historias: listFuncionalidadesDe(this.app, epica.folder)
+    }));
+  }
+  render() {
+    const cont = this.contentEl;
+    cont.empty();
+    cont.addClass("gf-colab");
+    if (!carpetasGestionListas(this.app)) {
+      const aviso = cont.createDiv({ cls: "gf-kanban-aviso" });
+      aviso.createEl("p", {
+        text: "Crea las carpetas de gesti\xF3n desde el panel de acciones antes de continuar."
+      });
+      const btn = aviso.createEl("button", { text: "Abrir panel de acciones", cls: "mod-cta" });
+      btn.addEventListener("click", () => void this.plugin.abrirAcciones());
+      return;
+    }
+    const barra = cont.createDiv({ cls: "gf-roadmap-controles" });
+    const recargar = barra.createEl("button", { text: "Recargar", cls: "gf-roadmap-recargar" });
+    recargar.addEventListener("click", () => this.recargar());
+    if (this.grupos.length === 0) {
+      cont.createDiv({ cls: "gf-kanban-vacio", text: "No hay \xE9picas." });
+      return;
+    }
+    const cuerpo = cont.createDiv();
+    for (const grupo of this.grupos)
+      this.renderGrupo(cuerpo, grupo);
+  }
+  renderGrupo(cuerpo, grupo) {
+    var _a, _b;
+    const tarjeta = cuerpo.createDiv({ cls: "gf-colab-card" });
+    tarjeta.addEventListener("dragover", (e) => {
+      if (!this.arrastre || this.arrastre.origenSlug === grupo.epica.slug)
+        return;
+      e.preventDefault();
+      tarjeta.addClass("gf-drop-card");
+    });
+    tarjeta.addEventListener("dragleave", () => tarjeta.removeClass("gf-drop-card"));
+    tarjeta.addEventListener("drop", (e) => {
+      if (!this.arrastre || this.arrastre.origenSlug === grupo.epica.slug)
+        return;
+      e.preventDefault();
+      tarjeta.removeClass("gf-drop-card");
+      this.confirmarMover(this.arrastre.ref, grupo.epica);
+    });
+    const head = tarjeta.createDiv({ cls: "gf-colab-head" });
+    const titulo = head.createEl("a", { text: grupo.epica.nombre, cls: "gf-colab-nombre internal-link" });
+    titulo.addEventListener("click", (e) => {
+      e.preventDefault();
+      void this.plugin.mostrarNota(grupo.epica.file);
+    });
+    const colabs = getAsignados(this.app, grupo.epica.file).filter(
+      (n) => this.plugin.settings.colaboradores.some((c) => c.nombre === n && c.visible !== false)
+    );
+    for (const c of colabs) {
+      renderChipEtiqueta(head, c, this.colorColab(c));
+    }
+    head.createEl("span", { cls: "gf-colab-conteo", text: String(grupo.historias.length) });
+    if (grupo.historias.length === 0) {
+      tarjeta.createEl("em", { cls: "gf-kanban-vacio", text: "Sin historias." });
+      return;
+    }
+    const colorEtq = new Map(leerEtiquetasEpica(this.app, grupo.epica).map((e) => [e.nombre, e.color]));
+    const ul = tarjeta.createEl("ul", { cls: "gf-colab-lista" });
+    for (const hist of grupo.historias) {
+      const completado = normalizarEstado((_a = hist.estado) != null ? _a : "") === "completado";
+      const li = ul.createEl("li", { cls: "gf-arrastrable" + (completado ? " gf-colab-hecha" : "") });
+      li.draggable = true;
+      li.addEventListener("dragstart", () => {
+        this.arrastre = { ref: hist, origenSlug: grupo.epica.slug };
+      });
+      li.addEventListener("dragend", () => {
+        this.arrastre = null;
+      });
+      const chk = li.createEl("input", { type: "checkbox", cls: "gf-colab-chk" });
+      chk.checked = completado;
+      chk.addEventListener("change", () => {
+        const quiere = chk.checked;
+        chk.checked = !quiere;
+        this.confirmarEstado(hist, quiere);
+      });
+      for (const etq of leerEtiquetasHistoria(this.app, hist.file)) {
+        renderChipEtiqueta(li, etq, (_b = colorEtq.get(etq)) != null ? _b : "#B9BEC6");
+      }
+      const a = li.createEl("a", { cls: "internal-link", text: hist.nombre });
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        void this.plugin.mostrarNota(hist.file);
+      });
+    }
+  }
+  /** Pide confirmación y marca la historia como completada / por hacer. */
+  confirmarEstado(hist, completar) {
+    const [titulo, mensaje, ok] = completar ? ["Marcar como hecha", "\xBFMarcar esta historia como hecha? Su estado pasar\xE1 a completado.", "Marcar como hecha"] : ["Marcar como pendiente", "\xBFQuitar el estado de completado de esta historia? Volver\xE1 a Por hacer.", "Marcar como pendiente"];
+    new ConfirmacionModal(this.plugin, titulo, mensaje, ok, async () => {
+      const estado = completar ? "completado" : "por-hacer";
+      await this.app.fileManager.processFrontMatter(hist.file, (fm) => {
+        fm.estado = estado;
+      });
+      hist.estado = estado;
+      this.render();
+    }).open();
+  }
+  colorColab(nombre) {
+    var _a, _b;
+    return (_b = (_a = this.plugin.settings.colaboradores.find((c) => c.nombre === nombre)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
+  }
+  confirmarMover(historia, destino) {
+    new ConfirmacionModal(
+      this.plugin,
+      "Mover historia",
+      `\xBFMover la historia "${historia.nombre}" a la \xE9pica "${destino.nombre}"? Se mover\xE1 con todo su contenido (incidencias, documentos y notas).`,
+      "Mover",
+      async () => {
+        try {
+          await moverHistoriaAEpica(this.app, historia, destino);
+          this.recargar();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    ).open();
+  }
+};
+
+// src/etiquetar-historias.ts
+var import_obsidian15 = require("obsidian");
+var VIEW_TYPE_ETIQUETAR_HISTORIAS = "gestor-funciones-etiquetar-historias";
+var SIN_ETIQUETA = "";
+var EtiquetarHistoriasView = class extends import_obsidian15.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.renderTimer = null;
+    this.epicaSlug = "";
+    this.epicas = [];
+    this.historias = [];
+    /** Etiquetas de la épica (carriles personalizados). */
+    this.etiquetas = [];
+    this.plugin = plugin;
+  }
+  getViewType() {
+    return VIEW_TYPE_ETIQUETAR_HISTORIAS;
+  }
+  getDisplayText() {
+    return "Etiquetas de historias \u2014 Gesti\xF3n de \xE9picas";
+  }
+  getIcon() {
+    return "tags";
+  }
+  async onOpen() {
+    const refrescar = (file) => {
+      const admin = (0, import_obsidian15.normalizePath)(this.plugin.settings.carpetaAdmin.trim() || "/");
+      if (file.path === admin || file.path.startsWith(admin + "/"))
+        this.renderSoon();
+    };
+    this.registerEvent(this.app.vault.on("create", refrescar));
+    this.registerEvent(this.app.vault.on("delete", refrescar));
+    this.registerEvent(this.app.vault.on("rename", refrescar));
+    this.registerEvent(this.app.metadataCache.on("changed", (file) => refrescar(file)));
+    this.recargar();
+  }
+  recargar() {
+    this.recolectar();
+    this.render();
+  }
+  renderSoon() {
+    if (this.renderTimer !== null)
+      window.clearTimeout(this.renderTimer);
+    this.renderTimer = window.setTimeout(() => {
+      this.renderTimer = null;
+      this.recargar();
+    }, 150);
+  }
+  epicaActual() {
+    var _a;
+    return (_a = this.epicas.find((e) => e.slug === this.epicaSlug)) != null ? _a : null;
+  }
+  recolectar() {
+    var _a;
+    const admin = this.plugin.settings.carpetaAdmin.trim();
+    this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+    this.historias = [];
+    this.etiquetas = [];
+    const ep = this.epicaActual();
+    if (!ep)
+      return;
+    this.etiquetas = leerEtiquetasEpica(this.app, ep);
+    const nombresValidos = new Set(this.etiquetas.map((e) => e.nombre));
+    for (const h of listFuncionalidadesDe(this.app, ep.folder)) {
+      const etiqueta = (_a = leerEtiquetasHistoria(this.app, h.file).find((n) => nombresValidos.has(n))) != null ? _a : SIN_ETIQUETA;
+      this.historias.push({ file: h.file, nombre: h.nombre, etiqueta });
+    }
+  }
+  colorEtiqueta(nombre) {
+    var _a, _b;
+    return (_b = (_a = this.etiquetas.find((e) => e.nombre === nombre)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
+  }
+  render() {
+    const cont = this.contentEl;
+    cont.empty();
+    cont.addClass("gf-kanban");
+    cont.addClass("gf-orgdocs");
+    if (!carpetasGestionListas(this.app)) {
+      const aviso = cont.createDiv({ cls: "gf-kanban-aviso" });
+      aviso.createEl("p", {
+        text: "Crea las carpetas de gesti\xF3n desde el panel de acciones antes de usar Etiquetas de historias."
+      });
+      const btn = aviso.createEl("button", { text: "Abrir panel de acciones", cls: "mod-cta" });
+      btn.addEventListener("click", () => void this.plugin.abrirAcciones());
+      return;
+    }
+    const barra = cont.createDiv({ cls: "gf-roadmap-controles" });
+    barra.createEl("span", { text: "\xC9pica", cls: "gf-roadmap-lbl" });
+    const epicaSel = barra.createEl("select", { cls: "dropdown" });
+    epicaSel.createEl("option", { text: "Seleccionar \xE9pica", value: "" });
+    for (const ep of this.epicas)
+      epicaSel.createEl("option", { text: ep.nombre, value: ep.slug });
+    epicaSel.value = this.epicaSlug;
+    epicaSel.addEventListener("change", () => {
+      this.epicaSlug = epicaSel.value;
+      this.recargar();
+    });
+    if (this.epicaActual()) {
+      const agregar = barra.createEl("button", { text: "Agregar etiqueta", cls: "gf-roadmap-recargar" });
+      agregar.addEventListener("click", () => this.agregarEtiqueta());
+    }
+    const recargar = barra.createEl("button", { text: "Recargar", cls: "gf-roadmap-recargar" });
+    recargar.addEventListener("click", () => this.recargar());
+    if (!this.epicaActual()) {
+      cont.createDiv({ cls: "gf-kanban-vacio", text: "Selecciona una \xE9pica." });
+      return;
+    }
+    const board = cont.createDiv({ cls: "gf-orgdocs-board" });
+    this.renderCarril(board, { nombre: SIN_ETIQUETA, titulo: "Sin etiqueta", fija: true });
+    for (const et of this.etiquetas) {
+      this.renderCarril(board, { nombre: et.nombre, titulo: et.nombre, fija: false });
+    }
+  }
+  renderCarril(board, carril) {
+    const colEl = board.createDiv({ cls: "gf-orgdocs-carril" });
+    colEl.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      colEl.addClass("gf-drop");
+    });
+    colEl.addEventListener("dragleave", () => colEl.removeClass("gf-drop"));
+    colEl.addEventListener("drop", (e) => {
+      var _a;
+      e.preventDefault();
+      colEl.removeClass("gf-drop");
+      const path = (_a = e.dataTransfer) == null ? void 0 : _a.getData("text/plain");
+      if (path)
+        void this.asignar(path, carril.nombre);
+    });
+    const header = colEl.createDiv({ cls: "gf-orgdocs-header" });
+    if (!carril.fija) {
+      const punto = header.createDiv({ cls: "gf-kanban-dot" });
+      punto.setCssStyles({ backgroundColor: this.colorEtiqueta(carril.nombre) });
+    }
+    header.createEl("span", { cls: "gf-kanban-titulo", text: carril.titulo });
+    const cards = this.historias.filter((h) => h.etiqueta === carril.nombre).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    header.createEl("span", { cls: "gf-kanban-conteo", text: String(cards.length) });
+    if (!carril.fija) {
+      const acciones = header.createDiv({ cls: "gf-orgdocs-carril-acciones" });
+      const renombrar = acciones.createEl("button", { cls: "gf-orgdocs-icono-btn" });
+      (0, import_obsidian15.setIcon)(renombrar, "pencil");
+      renombrar.setAttr("aria-label", "Renombrar etiqueta");
+      renombrar.addEventListener("click", () => this.renombrarEtiqueta(carril.nombre));
+      const eliminar = acciones.createEl("button", { cls: "gf-orgdocs-icono-btn" });
+      (0, import_obsidian15.setIcon)(eliminar, "trash-2");
+      eliminar.setAttr("aria-label", "Eliminar etiqueta");
+      eliminar.addEventListener("click", () => this.eliminarEtiqueta(carril.nombre));
+    }
+    const cuerpo = colEl.createDiv({ cls: "gf-orgdocs-cuerpo" });
+    if (cards.length === 0) {
+      cuerpo.createDiv({ cls: "gf-kanban-vacio", text: "Sin historias." });
+    }
+    for (const card of cards)
+      this.renderTarjeta(cuerpo, card);
+  }
+  renderTarjeta(cuerpo, card) {
+    const el = cuerpo.createDiv({ cls: "gf-kanban-card gf-orgdocs-card" });
+    el.draggable = true;
+    el.addEventListener("dragstart", (e) => {
+      var _a;
+      (_a = e.dataTransfer) == null ? void 0 : _a.setData("text/plain", card.file.path);
+    });
+    if (card.etiqueta) {
+      renderChipEtiqueta(el, card.etiqueta, this.colorEtiqueta(card.etiqueta));
+    }
+    el.createSpan({ cls: "gf-orgdocs-card-nombre", text: card.nombre });
+    el.addEventListener("click", () => void this.plugin.mostrarNota(card.file));
+  }
+  /** Asigna (reemplaza) la etiqueta de la historia: una etiqueta por historia. */
+  async asignar(path, etiqueta) {
+    const card = this.historias.find((h) => h.file.path === path);
+    if (!card || card.etiqueta === etiqueta)
+      return;
+    await guardarEtiquetasHistoria(this.app, card.file, etiqueta ? [etiqueta] : []);
+    this.recargar();
+  }
+  agregarEtiqueta() {
+    const ep = this.epicaActual();
+    if (!ep)
+      return;
+    new NombrePromptModal(this.plugin, "Nueva etiqueta", "", colorAleatorio(), (nombre, color) => {
+      if (this.etiquetas.some((e) => e.nombre === nombre))
+        return;
+      const nuevas = [...this.etiquetas, { nombre, color, visible: true }];
+      void (async () => {
+        await guardarEtiquetasEpica(this.app, ep, nuevas);
+        this.recargar();
+      })();
+    }).open();
+  }
+  renombrarEtiqueta(nombre) {
+    var _a;
+    const ep = this.epicaActual();
+    if (!ep)
+      return;
+    const actual = this.etiquetas.find((e) => e.nombre === nombre);
+    new NombrePromptModal(
+      this.plugin,
+      "Editar etiqueta",
+      nombre,
+      (_a = actual == null ? void 0 : actual.color) != null ? _a : colorAleatorio(),
+      (nuevo, color) => {
+        if (nuevo !== nombre && this.etiquetas.some((e) => e.nombre === nuevo))
+          return;
+        void (async () => {
+          const nuevas = this.etiquetas.map(
+            (e) => e.nombre === nombre ? { ...e, nombre: nuevo, color } : e
+          );
+          await guardarEtiquetasEpica(this.app, ep, nuevas);
+          if (nuevo !== nombre)
+            await renombrarEtiquetaHistoria(this.app, ep, nombre, nuevo);
+          this.recargar();
+        })();
+      }
+    ).open();
+  }
+  eliminarEtiqueta(nombre) {
+    const ep = this.epicaActual();
+    if (!ep)
+      return;
+    new ConfirmacionModal(
+      this.plugin,
+      "Eliminar etiqueta",
+      `\xBFEliminar la etiqueta "${nombre}"? Se quitar\xE1 de la \xE9pica y de todas las historias que la tengan.`,
+      "Eliminar",
+      async () => {
+        const nuevas = this.etiquetas.filter((e) => e.nombre !== nombre);
+        await guardarEtiquetasEpica(this.app, ep, nuevas);
+        await eliminarEtiquetaHistoria(this.app, ep, nombre);
+        this.recargar();
+      }
+    ).open();
+  }
+};
+var NombrePromptModal = class extends import_obsidian15.Modal {
+  constructor(plugin, titulo, valor, colorInicial, onGuardar) {
+    super(plugin.app);
+    this.titulo = titulo;
+    this.valor = valor;
+    this.colorInicial = colorInicial;
+    this.onGuardar = onGuardar;
+  }
+  onOpen() {
+    this.titleEl.setText(this.titulo);
+    const input = this.contentEl.createEl("input", {
+      type: "text",
+      cls: "gf-orgdocs-nombre-input",
+      value: this.valor
+    });
+    input.placeholder = "Nombre de la etiqueta";
+    const colorRow = this.contentEl.createDiv({ cls: "gf-campo" });
+    colorRow.createEl("label", { text: "Color", cls: "gf-campo-label" });
+    const selectorColor = renderSelectorColor(colorRow, this.colorInicial);
+    const guardar = () => {
+      const nombre = input.value.trim();
+      if (!nombre)
+        return;
+      this.onGuardar(nombre, selectorColor.getColor());
+      this.close();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        guardar();
+      }
+    });
+    const row = this.contentEl.createDiv({ cls: "gf-botones" });
+    const cancelar = row.createEl("button", { text: "Cancelar" });
+    cancelar.addEventListener("click", () => this.close());
+    const ok = row.createEl("button", { text: "Guardar", cls: "mod-cta" });
+    ok.addEventListener("click", guardar);
+    window.setTimeout(() => input.focus(), 0);
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
 // src/main.ts
 function sanearOrganizacionDocs(valor) {
   const out = {};
@@ -6180,7 +6590,7 @@ function sanearOrganizacionDocs(valor) {
   }
   return out;
 }
-var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
+var GestorFuncionesPlugin = class extends import_obsidian16.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -6190,7 +6600,7 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
   async onload() {
     await this.loadSettings();
     this.app.workspace.onLayoutReady(() => void migrarCarpetasHistorias(this.app));
-    (0, import_obsidian14.addIcon)(ICONO_PLUGIN, ICONO_PLUGIN_SVG);
+    (0, import_obsidian16.addIcon)(ICONO_PLUGIN, ICONO_PLUGIN_SVG);
     this.addSettingTab(new GestorSettingTab(this.app, this));
     registerDashboard(this);
     this.registerView(VIEW_TYPE_ACCIONES, (leaf) => new AccionesView(leaf, this));
@@ -6214,6 +6624,11 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
       VIEW_TYPE_ORGANIZAR_DOCS,
       (leaf) => new OrganizarDocumentosView(leaf, this)
     );
+    this.registerView(VIEW_TYPE_HISTORIAS, (leaf) => new HistoriasView(leaf, this));
+    this.registerView(
+      VIEW_TYPE_ETIQUETAR_HISTORIAS,
+      (leaf) => new EtiquetarHistoriasView(leaf, this)
+    );
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu, editor) => {
         menu.addItem(
@@ -6232,14 +6647,9 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
       callback: () => this.abrirModal("crearfn")
     });
     this.addCommand({
-      id: "etiquetas-por-epica",
-      name: "Configurar etiquetas",
-      callback: () => this.abrirModal("etiquetasEpica")
-    });
-    this.addCommand({
       id: "asignar-etiquetas",
-      name: "Etiquetar historias",
-      callback: () => this.abrirModal("asignarEtiquetas")
+      name: "Etiquetas de historias",
+      callback: () => void this.abrirEtiquetarHistorias()
     });
     this.addCommand({
       id: "configurar-incidencias",
@@ -6273,8 +6683,8 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
     });
     this.addCommand({
       id: "mover-historia",
-      name: "Mover historia a otra \xE9pica",
-      callback: () => this.abrirModal("moverHistoria")
+      name: "Historias",
+      callback: () => void this.abrirHistorias()
     });
     this.addCommand({
       id: "editar-incidencia",
@@ -6298,12 +6708,12 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
     });
     this.addCommand({
       id: "abrir-documentos",
-      name: "Abrir documentos",
+      name: "Documentos por \xE9pica",
       callback: () => void this.abrirDocumentos()
     });
     this.addCommand({
       id: "organizar-documentos",
-      name: "Organizar documentos",
+      name: "Tablero de documentos",
       callback: () => void this.abrirOrganizarDocumentos()
     });
     this.addCommand({
@@ -6348,7 +6758,7 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
     });
     this.addCommand({
       id: "abrir-gestor-funcionalidades",
-      name: "Abrir gesti\xF3n de historias",
+      name: "Abrir planeaci\xF3n",
       callback: () => void this.abrirGestorFuncionalidades()
     });
     this.addCommand({
@@ -6410,24 +6820,6 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
           ]
         }).open();
         break;
-      case "etiquetasEpica":
-        new GestorEtiquetasModal(this, {
-          titulo: "Configurar etiquetas",
-          nuevoNombre: "Etiqueta",
-          conVisible: true,
-          avisoEliminar: "Se quitar\xE1 de las historias que la tengan asignada.",
-          porEpica: {
-            epicas: listFuncionalidades(this.app, this.settings.carpetaAdmin),
-            cargar: (ep) => leerEtiquetasEpica(this.app, ep),
-            guardar: (ep, lista) => guardarEtiquetasEpica(this.app, ep, lista),
-            renombrar: (ep, ant, nue) => renombrarEtiquetaHistoria(this.app, ep, ant, nue),
-            eliminar: (ep, nombre) => eliminarEtiquetaHistoria(this.app, ep, nombre)
-          }
-        }).open();
-        break;
-      case "asignarEtiquetas":
-        new AsignarEtiquetasModal(this).open();
-        break;
       case "configIncidencias":
         new GestorEtiquetasModal(this, {
           titulo: "Configurar incidencias",
@@ -6449,9 +6841,6 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
         break;
       case "editarNombre":
         new EditarNombreModal(this).open();
-        break;
-      case "moverHistoria":
-        new MoverHistoriaModal(this).open();
         break;
       case "editarIncidencia":
         new MoverIncidenciaModal(this).open();
@@ -6558,6 +6947,12 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
   async abrirOrganizarDocumentos() {
     await this.abrirVistaEnPestana(VIEW_TYPE_ORGANIZAR_DOCS);
   }
+  async abrirHistorias() {
+    await this.abrirVistaEnPestana(VIEW_TYPE_HISTORIAS);
+  }
+  async abrirEtiquetarHistorias() {
+    await this.abrirVistaEnPestana(VIEW_TYPE_ETIQUETAR_HISTORIAS);
+  }
   /**
    * Abre la vista como pestaña del área principal. Si quedó anclada en un
    * panel lateral (layouts guardados de versiones anteriores), la desancla
@@ -6614,7 +7009,13 @@ var GestorFuncionesPlugin = class extends import_obsidian14.Plugin {
       color: c.color || COLOR_ETIQUETA_DEFECTO,
       visible: c.visible === void 0 ? true : Boolean(c.visible)
     });
-    const colaboradores = primeraVez ? [{ ...COLABORADOR_DEFECTO }] : ((_c = data.colaboradores) != null ? _c : []).map(conVisible);
+    const colaboradores = primeraVez ? [{ ...COLABORADOR_DEFECTO }] : ((_c = data.colaboradores) != null ? _c : []).map(conVisible).map(
+      (c) => (
+        // Migración: el color por defecto antiguo ("#5082ff") quedaba fuera
+        // de la paleta cerrada; se reasigna al Azul de la paleta.
+        c.color.toLowerCase() === "#5082ff" ? { ...c, color: "#2D9CFF" } : c
+      )
+    );
     const incidencias = data.incidencias === void 0 ? INCIDENCIAS_DEFECTO.map((i) => ({ ...i })) : data.incidencias.map(conVisible);
     const documentos = data.documentos === void 0 ? DOCUMENTOS_DEFECTO.map((d) => ({ ...d })) : data.documentos.map(conVisible);
     const favoritos = ((_d = data.favoritos) != null ? _d : []).map(String);

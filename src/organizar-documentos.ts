@@ -57,7 +57,7 @@ export class OrganizarDocumentosView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Organizar documentos — Gestión de épicas";
+		return "Tablero de documentos — Gestión de épicas";
 	}
 
 	getIcon(): string {
@@ -174,7 +174,7 @@ export class OrganizarDocumentosView extends ItemView {
 		if (!carpetasGestionListas(this.app)) {
 			const aviso = cont.createDiv({ cls: "gf-kanban-aviso" });
 			aviso.createEl("p", {
-				text: "Crea las carpetas de gestión desde el panel de acciones antes de organizar documentos.",
+				text: "Crea las carpetas de gestión desde el panel de acciones antes de usar el Tablero de documentos.",
 			});
 			const btn = aviso.createEl("button", { text: "Abrir panel de acciones", cls: "mod-cta" });
 			btn.addEventListener("click", () => void this.plugin.abrirAcciones());

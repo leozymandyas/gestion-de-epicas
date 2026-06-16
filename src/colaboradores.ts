@@ -55,7 +55,7 @@ export const CONFIG_INCIDENCIAS: VistaColabConfig = {
 
 export const CONFIG_DOCUMENTOS: VistaColabConfig = {
 	viewType: VIEW_TYPE_DOCUMENTOS,
-	titulo: "Documentos",
+	titulo: "Documentos por épica",
 	icon: "file-text",
 	registro: (p) => p.settings.documentos,
 	incluyeTareasPendientes: false,
@@ -87,8 +87,9 @@ export class TareasColaboradorView extends ItemView {
 	private epicaConocidas = new Set<string>();
 	/** Mostrar incidencias completadas (tachadas). Marcado por defecto. */
 	private verCompletadas = true;
-	/** Arrastre en curso (reordenar tarjetas de colaborador o incidencias). */
-	private arrastre: { tipo: "grupo" | "item"; valor: string } | null = null;
+	/** Arrastre en curso (reordenar tarjetas de colaborador o incidencias). Para
+	 * items, `origen` es el grupo (colaborador) desde el que se arrastra. */
+	private arrastre: { tipo: "grupo" | "item"; valor: string; origen?: string } | null = null;
 	/** Grupos a pintar (por colaborador o por épica/historia, según config). */
 	private grupos: Array<{
 		clave: string;
@@ -96,6 +97,8 @@ export class TareasColaboradorView extends ItemView {
 		conProgreso: boolean;
 		/** Solo en modo colaborador: clave del filtro (nombre o "Sin asignar"). */
 		filtroClave?: string;
+		/** Solo en modo contexto (documentos): la épica/historia del grupo. */
+		ref?: FuncRef;
 		items: IncidenciaAsignada[];
 	}> = [];
 
@@ -207,6 +210,7 @@ export class TareasColaboradorView extends ItemView {
 		const sinAsignar: IncidenciaAsignada[] = [];
 		// Modo contexto: un grupo por épica/historia (orden de aparición).
 		const porContexto = new Map<string, IncidenciaAsignada[]>();
+		const refPorContexto = new Map<string, FuncRef>();
 
 		const maxSprints = this.plugin.settings.numSprints;
 		const filtrar = !(this.desde === 1 && this.hasta === maxSprints);
@@ -217,6 +221,7 @@ export class TareasColaboradorView extends ItemView {
 		};
 
 		const recoger = (ref: FuncRef, contexto: string, epicaNombre: string) => {
+			refPorContexto.set(contexto, ref);
 			if (!this.epicaConocidas.has(epicaNombre)) {
 				this.epicaConocidas.add(epicaNombre);
 				this.epicaSeleccion.add(epicaNombre);
@@ -270,6 +275,7 @@ export class TareasColaboradorView extends ItemView {
 					clave,
 					conProgreso: false,
 					filtroClave: clave,
+					ref: refPorContexto.get(clave),
 					items: porContexto.get(clave) ?? [],
 				});
 			}
@@ -348,7 +354,7 @@ export class TareasColaboradorView extends ItemView {
 					grupo.filtroClave && grupo.filtroClave !== SIN_ASIGNAR
 						? grupo.filtroClave
 						: undefined;
-				this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso, dragClave);
+				this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso, dragClave, grupo.filtroClave, grupo.ref);
 				algo = true;
 			}
 
@@ -472,16 +478,54 @@ export class TareasColaboradorView extends ItemView {
 		incidencias: IncidenciaAsignada[],
 		color: string | undefined,
 		conProgreso: boolean,
-		dragClave?: string
+		dragClave?: string,
+		grupoFiltro?: string,
+		ref?: FuncRef
 	): void {
+		// Solo en modo colaborador se puede reasignar arrastrando incidencias entre
+		// carriles (cada carril es un colaborador, o "Sin asignar").
+		const reasignable = this.cfg.agruparPor === "colaborador";
 		const tarjeta = cuerpo.createDiv({ cls: "gf-colab-card" });
+
+		// Soltar una incidencia en el carril (no sobre otra) la reasigna a este
+		// colaborador (o la deja sin asignar). Pide confirmación.
+		if (reasignable) {
+			tarjeta.addEventListener("dragover", (e) => {
+				if (this.arrastre?.tipo !== "item" || this.arrastre.origen === grupoFiltro) return;
+				e.preventDefault();
+				tarjeta.addClass("gf-drop-card");
+			});
+			tarjeta.addEventListener("dragleave", () => tarjeta.removeClass("gf-drop-card"));
+			tarjeta.addEventListener("drop", (e) => {
+				if (this.arrastre?.tipo !== "item" || this.arrastre.origen === grupoFiltro) return;
+				e.preventDefault();
+				tarjeta.removeClass("gf-drop-card");
+				this.confirmarReasignar(this.arrastre.valor, grupoFiltro);
+			});
+		}
 
 		const head = tarjeta.createDiv({ cls: "gf-colab-head" });
 		if (color) {
 			const punto = head.createDiv({ cls: "gf-colab-punto" });
 			punto.setCssStyles({ backgroundColor: color });
 		}
-		head.createEl("span", { text: titulo, cls: "gf-colab-nombre" });
+		if (ref) {
+			// Modo contexto (documentos): el título abre la nota de la épica/historia
+			// y se muestran sus colaboradores asignados.
+			const tituloEl = head.createEl("a", { text: titulo, cls: "gf-colab-nombre internal-link" });
+			tituloEl.addEventListener("click", (e) => {
+				e.preventDefault();
+				void this.plugin.mostrarNota(ref.file);
+			});
+			for (const c of getAsignados(this.app, ref.file).filter((n) =>
+				this.plugin.settings.colaboradores.some((x) => x.nombre === n && x.visible !== false)
+			)) {
+				const colColor = this.plugin.settings.colaboradores.find((x) => x.nombre === c)?.color ?? "#B9BEC6";
+				renderChipEtiqueta(head, c, colColor);
+			}
+		} else {
+			head.createEl("span", { text: titulo, cls: "gf-colab-nombre" });
+		}
 
 		// Reordenar tarjetas de colaborador: la cabecera es el asa de arrastre y la
 		// tarjeta es zona de soltado (inserta la arrastrada antes de esta).
@@ -543,7 +587,7 @@ export class TareasColaboradorView extends ItemView {
 					li.draggable = true;
 					li.addClass("gf-arrastrable");
 					li.addEventListener("dragstart", (e) => {
-						this.arrastre = { tipo: "item", valor: inc.file.path };
+						this.arrastre = { tipo: "item", valor: inc.file.path, origen: grupoFiltro };
 						e.stopPropagation();
 					});
 					li.addEventListener("dragend", () => {
@@ -562,7 +606,12 @@ export class TareasColaboradorView extends ItemView {
 						e.stopPropagation();
 						li.removeClass("gf-drop-card");
 						const origen = this.arrastre.valor;
-						if (origen !== inc.file.path) void this.moverItem(origen, inc.file.path);
+						// Distinto carril (colaborador): reasignar; mismo carril: reordenar.
+						if (reasignable && this.arrastre.origen !== grupoFiltro) {
+							this.confirmarReasignar(origen, grupoFiltro);
+						} else if (origen !== inc.file.path) {
+							void this.moverItem(origen, inc.file.path);
+						}
 					});
 				}
 
@@ -691,6 +740,35 @@ export class TareasColaboradorView extends ItemView {
 		else cols.splice(pos, 0, item);
 		await this.plugin.saveSettings();
 		await this.recargar();
+	}
+
+	/** Pide confirmación y reasigna (reemplaza) la incidencia al colaborador del
+	 * carril destino; si el destino es "Sin asignar", la deja sin colaboradores. */
+	private confirmarReasignar(path: string, destino: string | undefined): void {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) return;
+		const colaborador = !destino || destino === SIN_ASIGNAR ? null : destino;
+		const mensaje = colaborador
+			? `¿Reasignar esta incidencia a "${colaborador}"? Se reemplazarán los colaboradores que tenga asignados.`
+			: "¿Quitar el colaborador asignado a esta incidencia?";
+		new ConfirmacionModal(
+			this.app,
+			"Reasignar incidencia",
+			mensaje,
+			colaborador ? "Reasignar" : "Quitar colaborador",
+			() => void this.reasignar(file, colaborador),
+			() => {
+				/* cancelado: no hace nada */
+			}
+		).open();
+	}
+
+	private async reasignar(file: TFile, colaborador: string | null): Promise<void> {
+		await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+			if (colaborador) fm.asignados = [colaborador];
+			else delete fm.asignados;
+		});
+		// El evento metadataCache "changed" refresca la vista con el dato nuevo.
 	}
 }
 

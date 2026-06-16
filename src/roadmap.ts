@@ -10,7 +10,7 @@ import {
 } from "./files";
 import { renderChipEtiqueta } from "./colores";
 import { AsignarSprintModal, crearSelectorEtiquetas } from "./modals";
-import { AnioPickerModal, crearSelect } from "./ui";
+import { AnioPickerModal, crearSelect, habilitarScrollHorizontal } from "./ui";
 
 export const VIEW_TYPE_ROADMAP = "gestor-funciones-roadmap";
 
@@ -35,6 +35,8 @@ export class RoadmapView extends ItemView {
 	private hasta: number;
 	/** Filtro por colaborador (nombres seleccionados); vacío = todos. */
 	private filtroColab = new Set<string>();
+	/** Mostrar también las épicas sin sprints asignados (del año seleccionado). */
+	private verTodas = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: GestorFuncionesPlugin) {
 		super(leaf);
@@ -71,8 +73,13 @@ export class RoadmapView extends ItemView {
 			epicaSlug: string,
 			etiqueta: string
 		) => {
-			const sprints = (await leerSprints(this.app, ref)).filter((s) => s.anio === this.anio);
-			if (sprints.length === 0) return;
+			const todos = await leerSprints(this.app, ref);
+			const sprints = todos.filter((s) => s.anio === this.anio);
+			if (sprints.length === 0) {
+				// "Ver todas": solo épicas, y solo si no tienen sprints en NINGÚN año
+				// (sin agendar). Las que tienen sprints en otros años no son de este año.
+				if (!this.verTodas || tipo !== "epica" || todos.length > 0) return;
+			}
 			const porSprint = new Map<number, CeldaSprint>();
 			for (const s of sprints) {
 				porSprint.set(s.sprint, { etiquetas: s.etiquetas });
@@ -153,6 +160,16 @@ export class RoadmapView extends ItemView {
 			textoVacio: "No hay colaboradores registrados.",
 			onChange: () => pintarTabla(),
 		});
+		// Ver todas las épicas (incluye las que no tienen sprints en el año).
+		const verLabel = barra.createEl("label", { cls: "gf-chk" });
+		const verChk = verLabel.createEl("input", { type: "checkbox" });
+		verChk.checked = this.verTodas;
+		verLabel.appendText(" Ver todas las épicas");
+		verChk.addEventListener("change", () => {
+			this.verTodas = verChk.checked;
+			void this.render();
+		});
+
 		const borrar = barra.createEl("button", { text: "Borrar filtros", cls: "gf-roadmap-recargar" });
 		borrar.addEventListener("click", () => {
 			this.filtroColab.clear();
@@ -179,6 +196,7 @@ export class RoadmapView extends ItemView {
 				return;
 			}
 			const wrap = tablaCont.createDiv({ cls: "gf-roadmap-tabla-wrap" });
+			habilitarScrollHorizontal(wrap);
 			const tabla = wrap.createEl("table", { cls: "gf-roadmap-tabla" });
 			const trh = tabla.createEl("thead").createEl("tr");
 			trh.createEl("th", { text: "Épica", cls: "gf-roadmap-th-epica" });

@@ -12,7 +12,7 @@ import {
 import { normalizarEstado, type Carril } from "./settings";
 import { renderChipEtiqueta } from "./colores";
 import { crearSelectorEtiquetas } from "./modals";
-import { crearSelect } from "./ui";
+import { crearSelect, habilitarScrollHorizontal } from "./ui";
 
 export const VIEW_TYPE_KANBAN = "gestor-funciones-kanban";
 
@@ -37,6 +37,8 @@ export class KanbanView extends ItemView {
 	private plugin: GestorFuncionesPlugin;
 	private renderTimer: number | null = null;
 	private cards: ItemCard[] = [];
+	/** Scroll horizontal del tablero, para conservarlo entre repintados. */
+	private scrollLeft = 0;
 	/** Filtros (no se persisten): por tipo de incidencia y por colaborador. */
 	private filtroTipos = new Set<string>();
 	private filtroColab = new Set<string>();
@@ -254,6 +256,10 @@ export class KanbanView extends ItemView {
 
 	private renderBoard(cont: HTMLElement): void {
 		const board = cont.createDiv({ cls: "gf-kanban-board" });
+		habilitarScrollHorizontal(board);
+		board.addEventListener("scroll", () => {
+			this.scrollLeft = board.scrollLeft;
+		});
 		const carriles = this.carrilesVisibles();
 		if (carriles.length === 0) {
 			board.createDiv({
@@ -296,6 +302,10 @@ export class KanbanView extends ItemView {
 			const cuerpo = col.createDiv({ cls: "gf-kanban-cuerpo" });
 			for (const card of tarjetas) this.renderTarjeta(cuerpo, card, carril);
 		}
+
+		// Restaura el scroll horizontal tras repintar (al mover una tarjeta no debe
+		// "saltar" al primer carril).
+		board.scrollLeft = this.scrollLeft;
 	}
 
 	private renderTarjeta(cuerpo: HTMLElement, card: ItemCard, carrilActual: Carril): void {

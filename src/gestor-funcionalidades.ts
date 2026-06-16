@@ -12,20 +12,25 @@ import {
 	listFuncionalidades,
 	listFuncionalidadesDe,
 } from "./files";
-import { Etiqueta } from "./settings";
+import { Etiqueta, normalizarEstado } from "./settings";
 import { renderChipEtiqueta } from "./colores";
-import { crearSelectorEtiquetas } from "./modals";
-import { AnioPickerModal, crearSelect } from "./ui";
+import { ConfirmacionModal, crearSelectorEtiquetas } from "./modals";
+import { AnioPickerModal, crearMultiSelect, crearSelect, habilitarScrollHorizontal } from "./ui";
 
 export const VIEW_TYPE_GESTOR_FN = "gestor-funciones-gestor-fn";
 
 interface CardHist {
 	file: TFile;
 	nombre: string;
+	/** Slug y nombre de la épica a la que pertenece la historia. */
+	epicaSlug: string;
+	epicaNombre: string;
 	/** Nombres de las etiquetas asignadas a la historia. */
 	etiquetas: string[];
 	/** Colaboradores asignados a la historia (nombres). */
 	colaboradores: string[];
+	/** Estado de la historia (frontmatter `estado`); normalizado. */
+	estado: string;
 	/** Sprint asignado para el año visible (null = sin sprint). */
 	sprint: number | null;
 }
@@ -35,14 +40,17 @@ interface DragPayload {
 }
 
 /**
- * Tablero de historias de una épica: una columna por cada sprint que la épica
- * tiene asignado en el año visible (más una columna "Sin sprint"). Arrastrar una
+ * Planeación: tablero de historias de una o varias épicas. Una columna por cada
+ * sprint del rango seleccionado (más una columna "Sin sprint"). Arrastrar una
  * historia a una columna escribe su `sprint`/`año` en el frontmatter.
  */
 export class GestorFuncionalidadesView extends ItemView {
 	private plugin: GestorFuncionesPlugin;
 	private renderTimer: number | null = null;
-	private epicaSlug = "";
+	/** Épicas seleccionadas (slugs). Por defecto, las que tienen sprints. */
+	private epicaSlugs = new Set<string>();
+	/** Si ya se aplicó la selección por defecto de épicas. */
+	private epicaInit = false;
 	private anio = new Date().getFullYear();
 	/** Filtro por etiqueta (nombres seleccionados). */
 	private filtro = new Set<string>();
@@ -53,16 +61,21 @@ export class GestorFuncionalidadesView extends ItemView {
 	private hasta: number;
 	private epicas: FuncRef[] = [];
 	private historias: CardHist[] = [];
-	/** Números de sprint que la épica tiene asignados en el año visible. */
-	private sprintsEpica: number[] = [];
-	/** Etiquetas (visibles) definidas en la épica. */
+	/** Scroll horizontal del tablero, para conservarlo entre repintados. */
+	private scrollLeft = 0;
+	/** Etiquetas (visibles) de las épicas seleccionadas, para el filtro. */
 	private etiquetasEpica: Etiqueta[] = [];
+	/** Mapa nombre de etiqueta → color (unión de las épicas seleccionadas). */
+	private colorEtiqueta = new Map<string, string>();
 
 	constructor(leaf: WorkspaceLeaf, plugin: GestorFuncionesPlugin) {
 		super(leaf);
 		this.plugin = plugin;
-		// Sprint inicio sugerido desde el panel (el usuario puede cambiarlo).
-		this.desde = Math.min(Math.max(plugin.settings.sprintActual.sprint, 1), plugin.settings.numSprints);
+		// Sprint inicio sugerido: dos antes del sprint elegido en el panel.
+		this.desde = Math.min(
+			Math.max(plugin.settings.sprintActual.sprint - 2, 1),
+			plugin.settings.numSprints
+		);
 		this.hasta = plugin.settings.numSprints;
 	}
 
@@ -71,11 +84,11 @@ export class GestorFuncionalidadesView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Gestión de historias — Gestión de épicas";
+		return "Planeación — Gestión de épicas";
 	}
 
 	getIcon(): string {
-		return "puzzle";
+		return "calendar-range";
 	}
 
 	async onOpen(): Promise<void> {
@@ -103,34 +116,55 @@ export class GestorFuncionalidadesView extends ItemView {
 		}, 150);
 	}
 
-	private epicaActual(): FuncRef | null {
-		return this.epicas.find((e) => e.slug === this.epicaSlug) ?? null;
+	private epicasSeleccionadas(): FuncRef[] {
+		return this.epicas.filter((e) => this.epicaSlugs.has(e.slug));
 	}
 
 	private async recolectar(): Promise<void> {
 		const admin = this.plugin.settings.carpetaAdmin.trim();
 		this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
 		this.historias = [];
-		this.sprintsEpica = [];
 		this.etiquetasEpica = [];
-		const ep = this.epicaActual();
-		if (!ep) return;
+		this.colorEtiqueta = new Map();
 
-		const sprints = (await leerSprints(this.app, ep)).filter((s) => s.anio === this.anio);
-		this.sprintsEpica = [...new Set(sprints.map((s) => s.sprint))].sort((a, b) => a - b);
-		this.etiquetasEpica = leerEtiquetasEpica(this.app, ep).filter((e) => e.visible !== false);
-
-		for (const h of listFuncionalidadesDe(this.app, ep.folder)) {
-			const asign = leerSprintHistoria(this.app, h.file);
-			const sprint = asign && asign.anio === this.anio ? asign.sprint : null;
-			this.historias.push({
-				file: h.file,
-				nombre: h.nombre,
-				etiquetas: leerEtiquetasHistoria(this.app, h.file),
-				colaboradores: getAsignados(this.app, h.file),
-				sprint,
-			});
+		// Por defecto se seleccionan las épicas que tienen sprints asignados (en
+		// cualquier año); el usuario puede cambiar la selección.
+		if (!this.epicaInit) {
+			this.epicaInit = true;
+			for (const ep of this.epicas) {
+				const sprints = await leerSprints(this.app, ep);
+				if (sprints.length > 0) this.epicaSlugs.add(ep.slug);
+			}
 		}
+		// Quita de la selección épicas que ya no existen.
+		const vivos = new Set(this.epicas.map((e) => e.slug));
+		for (const slug of [...this.epicaSlugs]) if (!vivos.has(slug)) this.epicaSlugs.delete(slug);
+
+		const seleccionadas = this.epicasSeleccionadas();
+		if (seleccionadas.length === 0) return;
+
+		const etiquetasVistas = new Map<string, Etiqueta>();
+		for (const ep of seleccionadas) {
+			for (const et of leerEtiquetasEpica(this.app, ep).filter((e) => e.visible !== false)) {
+				if (!etiquetasVistas.has(et.nombre)) etiquetasVistas.set(et.nombre, et);
+				if (!this.colorEtiqueta.has(et.nombre)) this.colorEtiqueta.set(et.nombre, et.color);
+			}
+			for (const h of listFuncionalidadesDe(this.app, ep.folder)) {
+				const asign = leerSprintHistoria(this.app, h.file);
+				const sprint = asign && asign.anio === this.anio ? asign.sprint : null;
+				this.historias.push({
+					file: h.file,
+					nombre: h.nombre,
+					epicaSlug: ep.slug,
+					epicaNombre: ep.nombre,
+					etiquetas: leerEtiquetasHistoria(this.app, h.file),
+					colaboradores: getAsignados(this.app, h.file),
+					estado: normalizarEstado(h.estado ?? ""),
+					sprint,
+				});
+			}
+		}
+		this.etiquetasEpica = [...etiquetasVistas.values()];
 	}
 
 	render(): void {
@@ -150,16 +184,17 @@ export class GestorFuncionalidadesView extends ItemView {
 
 		const barra = cont.createDiv({ cls: "gf-roadmap-controles" });
 
-		// Selector de épica.
-		barra.createEl("span", { text: "Épica", cls: "gf-roadmap-lbl" });
-		const epicaSel = barra.createEl("select", { cls: "dropdown" });
-		epicaSel.createEl("option", { text: "Seleccionar épica", value: "" });
-		for (const ep of this.epicas) epicaSel.createEl("option", { text: ep.nombre, value: ep.slug });
-		epicaSel.value = this.epicaSlug;
-		epicaSel.addEventListener("change", () => {
-			this.epicaSlug = epicaSel.value;
-			this.filtro.clear();
-			void this.recargar();
+		// Selector de épicas (multi): por defecto las que tienen sprints.
+		barra.createEl("span", { text: "Épicas", cls: "gf-roadmap-lbl" });
+		crearMultiSelect({
+			parent: barra,
+			etiqueta: "Épicas",
+			opciones: this.epicas.map((e) => ({ valor: e.slug, texto: e.nombre })),
+			seleccion: this.epicaSlugs,
+			onChange: () => {
+				this.filtro.clear();
+				void this.recargar();
+			},
 		});
 
 		// Año.
@@ -212,8 +247,8 @@ export class GestorFuncionalidadesView extends ItemView {
 			},
 		});
 
-		// Filtros (solo con épica elegida): por etiqueta y por colaborador.
-		if (this.epicaActual()) {
+		// Filtros (solo con épicas elegidas): por etiqueta y por colaborador.
+		if (this.epicasSeleccionadas().length > 0) {
 			barra.createEl("span", { text: "Etiquetas", cls: "gf-roadmap-lbl" });
 			crearSelectorEtiquetas({
 				parent: barra,
@@ -244,8 +279,8 @@ export class GestorFuncionalidadesView extends ItemView {
 		recargar.setAttr("title", "Releer las notas desde el disco");
 		recargar.addEventListener("click", () => void this.recargar());
 
-		if (!this.epicaActual()) {
-			cont.createDiv({ cls: "gf-kanban-vacio", text: "Selecciona una épica." });
+		if (this.epicasSeleccionadas().length === 0) {
+			cont.createDiv({ cls: "gf-kanban-vacio", text: "Selecciona al menos una épica." });
 			return;
 		}
 		pintarBoard();
@@ -253,13 +288,18 @@ export class GestorFuncionalidadesView extends ItemView {
 
 	private renderBoard(cont: HTMLElement): void {
 		const board = cont.createDiv({ cls: "gf-kanban-board" });
-		// La columna "Sin sprint" siempre está; las de sprint se acotan al rango.
+		habilitarScrollHorizontal(board);
+		board.addEventListener("scroll", () => {
+			this.scrollLeft = board.scrollLeft;
+		});
+		// La columna "Sin sprint" siempre está; se muestran TODOS los sprints del
+		// rango seleccionado (aunque ninguna historia los tenga asignados).
 		const columnas: Array<{ titulo: string; sprint: number | null }> = [
 			{ titulo: "Sin sprint", sprint: null },
-			...this.sprintsEpica
-				.filter((n) => n >= this.desde && n <= this.hasta)
-				.map((n) => ({ titulo: `Sprint ${n}`, sprint: n })),
 		];
+		for (let n = this.desde; n <= this.hasta; n++) {
+			columnas.push({ titulo: `Sprint ${n}`, sprint: n });
+		}
 		const filtradas = this.historias.filter(
 			(h) =>
 				(this.filtro.size === 0 || h.etiquetas.some((e) => this.filtro.has(e))) &&
@@ -289,10 +329,29 @@ export class GestorFuncionalidadesView extends ItemView {
 			const cuerpo = colEl.createDiv({ cls: "gf-kanban-cuerpo" });
 			for (const card of tarjetas) this.renderTarjeta(cuerpo, card, col.sprint);
 		}
+
+		// Restaura el scroll horizontal tras repintar (al mover una tarjeta no debe
+		// "saltar" al primer carril).
+		board.scrollLeft = this.scrollLeft;
 	}
 
 	private colorColab(nombre: string): string {
 		return this.plugin.settings.colaboradores.find((c) => c.nombre === nombre)?.color ?? "#B9BEC6";
+	}
+
+	/** Pide confirmación y marca la historia como completada / por hacer. */
+	private confirmarEstado(card: CardHist, completar: boolean): void {
+		const [titulo, mensaje, ok] = completar
+			? ["Marcar como hecha", "¿Marcar esta historia como hecha? Su estado pasará a completado.", "Marcar como hecha"]
+			: ["Marcar como pendiente", "¿Quitar el estado de completado de esta historia? Volverá a Por hacer.", "Marcar como pendiente"];
+		new ConfirmacionModal(this.plugin, titulo, mensaje, ok, async () => {
+			const estado = completar ? "completado" : "por-hacer";
+			await this.app.fileManager.processFrontMatter(card.file, (fm: Record<string, unknown>) => {
+				fm.estado = estado;
+			});
+			card.estado = estado;
+			this.render();
+		}).open();
 	}
 
 	private renderTarjeta(cuerpo: HTMLElement, card: CardHist, sprintCol: number | null): void {
@@ -321,12 +380,25 @@ export class GestorFuncionalidadesView extends ItemView {
 			}
 		});
 
-		el.createDiv({ cls: "gf-kanban-card-nombre", text: card.nombre });
+		const completado = card.estado === "completado";
+		if (completado) el.addClass("gf-kanban-card-hecha");
+		// Check para marcar la historia como completada (estado en el md).
+		const head = el.createDiv({ cls: "gf-kanban-card-head" });
+		const chk = head.createEl("input", { type: "checkbox", cls: "gf-colab-chk" });
+		chk.checked = completado;
+		chk.addEventListener("click", (e) => e.stopPropagation());
+		chk.addEventListener("change", () => {
+			const quiere = chk.checked;
+			chk.checked = !quiere; // se revierte hasta confirmar
+			this.confirmarEstado(card, quiere);
+		});
+		head.createDiv({ cls: "gf-kanban-card-nombre", text: card.nombre });
+		// La épica de la historia se muestra siempre.
+		el.createDiv({ cls: "gf-kanban-card-func", text: card.epicaNombre });
 		if (card.etiquetas.length > 0 || card.colaboradores.length > 0) {
 			const chips = el.createDiv({ cls: "gf-kanban-card-chips" });
 			for (const n of card.etiquetas) {
-				const color = this.etiquetasEpica.find((e) => e.nombre === n)?.color ?? "#B9BEC6";
-				renderChipEtiqueta(chips, n, color);
+				renderChipEtiqueta(chips, n, this.colorEtiqueta.get(n) ?? "#B9BEC6");
 			}
 			for (const c of card.colaboradores) {
 				renderChipEtiqueta(chips, c, this.colorColab(c));
@@ -385,7 +457,9 @@ export class GestorFuncionalidadesView extends ItemView {
 			await guardarSprintHistoria(this.app, h.file, sprint, this.anio);
 		}
 		await this.plugin.saveSettings();
-		await this.recargar();
+		// Se repinta con el estado en memoria (ya actualizado): releer de la caché
+		// de metadatos aquí la mostraría desfasada (nombre/etiquetas/sprint).
+		this.render();
 	}
 }
 

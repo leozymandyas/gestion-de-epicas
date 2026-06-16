@@ -395,6 +395,12 @@
 	font-weight: 500;
 }
 
+/* Historia marcada como completada en Planeación. */
+.gf-kanban-card-hecha .gf-kanban-card-nombre {
+	text-decoration: line-through;
+	color: var(--text-muted);
+}
+
 /* Chips de etiquetas dentro de una tarjeta de historia. */
 .gf-kanban-card-chips {
 	display: flex;
@@ -1283,8 +1289,8 @@
 	min-width: 34px;
 }
 
-.gf-roadmap-th-epica,
-.gf-roadmap-epica {
+.gf-roadmap-tabla th.gf-roadmap-th-epica,
+.gf-roadmap-tabla td.gf-roadmap-epica {
 	text-align: left;
 	min-width: 160px;
 	white-space: nowrap;

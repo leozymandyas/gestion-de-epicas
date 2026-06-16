@@ -6,6 +6,53 @@ export interface OpcionMulti {
 }
 
 /**
+ * Habilita scroll horizontal cómodo en un contenedor: (1) la rueda vertical del
+ * ratón lo desplaza en horizontal, y (2) al arrastrar una tarjeta cerca de los
+ * bordes izquierdo/derecho se auto-desplaza para alcanzar carriles fuera de vista.
+ */
+export function habilitarScrollHorizontal(cont: HTMLElement): void {
+	cont.addEventListener(
+		"wheel",
+		(e) => {
+			if (e.deltaY === 0 || e.shiftKey) return;
+			if (cont.scrollWidth <= cont.clientWidth) return;
+			cont.scrollLeft += e.deltaY;
+			e.preventDefault();
+		},
+		{ passive: false }
+	);
+
+	// Auto-scroll mientras se arrastra cerca de un borde (con temporizador para
+	// que siga desplazándose aunque el puntero se quede quieto en el borde).
+	let dir = 0;
+	let timer: number | null = null;
+	const parar = () => {
+		if (timer !== null) {
+			window.clearInterval(timer);
+			timer = null;
+		}
+		dir = 0;
+	};
+	cont.addEventListener("dragover", (e) => {
+		const r = cont.getBoundingClientRect();
+		const margen = 64;
+		if (e.clientX < r.left + margen) dir = -1;
+		else if (e.clientX > r.right - margen) dir = 1;
+		else dir = 0;
+		if (dir !== 0 && timer === null) {
+			timer = window.setInterval(() => {
+				cont.scrollLeft += dir * 16;
+			}, 16);
+		} else if (dir === 0) {
+			parar();
+		}
+	});
+	cont.addEventListener("dragleave", parar);
+	cont.addEventListener("drop", parar);
+	cont.addEventListener("dragend", parar);
+}
+
+/**
  * Control tipo "select con checkboxes": un botón que abre un panel con casillas.
  * Si están todas marcadas el botón muestra "Todos". Muta `seleccion` y llama a
  * `onChange` sin reconstruir el control (el panel permanece abierto).

@@ -772,18 +772,17 @@ export class CrearIncidenciaModal extends GestorModal {
 			"Aparece en el cuerpo de la nota (sección Descripción)"
 		);
 
-		// Colaboradores como chips (los documentos no llevan colaboradores).
-		const colabSel = new Set<string>();
+		// Colaborador único (los documentos no llevan colaboradores).
+		let colabCampo: CampoSelect | null = null;
 		if (this.cfg.conColaboradores) {
-			const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-			colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
-			crearSelectorEtiquetas({
-				parent: colWrap.createDiv(),
-				etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
-				seleccion: colabSel,
-				textoBtn: "Asignar colaboradores…",
-				textoVacio: "No hay colaboradores registrados.",
-			});
+			colabCampo = this.campoSelect("Colaborador (opcional)", "Sin colaborador");
+			this.setOpciones(
+				colabCampo.select,
+				"Sin colaborador",
+				this.plugin.settings.colaboradores
+					.filter((c) => c.visible !== false)
+					.map((c) => ({ value: c.nombre, label: c.nombre }))
+			);
 		}
 
 		this.botones(async () => {
@@ -831,7 +830,8 @@ export class CrearIncidenciaModal extends GestorModal {
 					tipoNombre,
 					descripcion.input.value
 				);
-				await this.aplicarAsignados(file, [...colabSel]);
+				const colab = colabCampo?.select.value ?? "";
+				await this.aplicarAsignados(file, colab ? [colab] : []);
 				this.close();
 				await this.abrirNota(file);
 			} catch (e) {
@@ -1641,161 +1641,79 @@ export class MoverEpicaModal extends GestorModal {
 
 /** Asignar colaboradores a incidencias (tareas y pendientes). */
 export class AsignarColaboradorModal extends GestorModal {
-	private seleccionados = new Set<string>();
-	private filas: Array<{ file: TFile; chk: HTMLInputElement }> = [];
+	private seleccion = new Set<string>();
 
 	onOpen(): void {
 		this.titleEl.setText("Asignar colaborador");
-		this.modalEl.addClass("gf-modal-sprints");
 
 		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
 		const epica = this.campoEpica(funcs);
 		const fn = this.campoFuncionalidad(epica);
 
-		// Colaboradores como chips (mismo selector que "Asignar etiquetas").
-		const colWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-		colWrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
-		crearSelectorEtiquetas({
-			parent: colWrap.createDiv(),
-			etiquetas: this.plugin.settings.colaboradores.filter((c) => c.visible !== false),
-			seleccion: this.seleccionados,
-			textoBtn: "Asignar colaboradores…",
-			textoVacio: "No hay colaboradores registrados.",
-			onChange: () => {
-				refrescarChecks();
-				actualizarBoton();
-			},
-		});
+		const colaboradores = this.plugin.settings.colaboradores.filter((c) => c.visible !== false);
 
-		// Filtro por tipo de incidencia.
-		let tipoFiltro = "";
-		const tipoWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-		tipoWrap.createEl("label", { text: "Tipo de incidencia", cls: "gf-campo-label" });
-		const tipoSel = tipoWrap.createEl("select", { cls: "dropdown gf-campo-select" });
-		tipoSel.createEl("option", { text: "Todos", value: "" });
-		for (const i of this.plugin.settings.incidencias) {
-			tipoSel.createEl("option", { text: i.nombre, value: i.nombre });
-		}
-		tipoSel.addEventListener("change", () => {
-			tipoFiltro = tipoSel.value;
-			renderIncidencias();
-			actualizarBoton();
-		});
+		const wrap = this.contentEl.createDiv({ cls: "gf-campo" });
+		wrap.createEl("label", { text: "Colaboradores", cls: "gf-campo-label" });
+		const selCont = wrap.createDiv();
+		const aviso = this.contentEl.createDiv({ cls: "gf-campo-aviso" });
 
-		const listaWrap = this.contentEl.createDiv({ cls: "gf-sprints-lista" });
+		const objetivo = (): files.FuncRef | null => fn.getFn() ?? epica.getFunc() ?? null;
 
-		const actualizarBoton = () => {
-			this.crearBtn.disabled = !epica.getFunc() || this.seleccionados.size === 0;
-		};
-
-		const refrescarChecks = () => {
-			for (const fila of this.filas) {
-				const asignados = files.getAsignados(this.app, fila.file);
-				fila.chk.checked =
-					this.seleccionados.size > 0 &&
-					[...this.seleccionados].every((c) => asignados.includes(c));
-			}
-		};
-
-		const colorTipo = (nombre: string) =>
-			this.plugin.settings.incidencias.find((i) => i.nombre === nombre)?.color ?? "#B9BEC6";
-
-		const renderIncidencias = () => {
-			listaWrap.empty();
-			this.filas = [];
-			const f = epica.getFunc();
-			if (!f) return;
-			// Con funcionalidad elegida se listan solo sus incidencias; sin ella,
-			// las de nivel épica más las de todas sus funcionalidades.
-			const seleccionFn = fn.getFn();
-
-			// Primera fila: asignar a la propia épica/historia (su nota principal).
-			const objetivoPrincipal = seleccionFn ?? f;
-			const filaPpal = listaWrap.createDiv({ cls: "gf-sprint-fila" });
-			const cabPpal = filaPpal.createDiv({ cls: "gf-sprint-cabecera" });
-			const chkPpal = cabPpal.createEl("input", { type: "checkbox" });
-			cabPpal.createEl("span", {
-				text: seleccionFn ? `Historia: ${seleccionFn.nombre}` : `Épica: ${f.nombre}`,
-				cls: "gf-sprint-nombre",
+		// Mismo selector (botón + panel de casillas) que el resto de los modales.
+		const reconstruir = () => {
+			selCont.empty();
+			crearSelectorEtiquetas({
+				parent: selCont,
+				etiquetas: colaboradores,
+				seleccion: this.seleccion,
+				textoBtn: "Asignar colaboradores…",
+				textoVacio: "No hay colaboradores registrados.",
 			});
-			this.filas.push({ file: objetivoPrincipal.file, chk: chkPpal });
-
-			const tipos = this.plugin.settings.incidencias;
-			const filtrar = (incs: files.Incidencia[]) =>
-				tipoFiltro ? incs.filter((i) => i.tipoNombre === tipoFiltro) : incs;
-			const grupos: Array<{ origen: string; incidencias: files.Incidencia[] }> = [];
-			if (seleccionFn) {
-				grupos.push({
-					origen: "",
-					incidencias: filtrar(files.listIncidencias(this.app, seleccionFn, tipos)),
-				});
-			} else {
-				grupos.push({ origen: "", incidencias: filtrar(files.listIncidencias(this.app, f, tipos)) });
-				for (const hija of files.listFuncionalidadesDe(this.app, f.folder)) {
-					grupos.push({
-						origen: hija.nombre,
-						incidencias: filtrar(files.listIncidencias(this.app, hija, tipos)),
-					});
-				}
-			}
-			const total = grupos.reduce((n, g) => n + g.incidencias.length, 0);
-			if (total === 0) {
-				listaWrap.createEl("em", {
-					cls: "gf-campo-aviso",
-					text: seleccionFn
-						? "Esta historia no tiene incidencias aún."
-						: "Esta épica no tiene incidencias aún.",
-				});
-			}
-			for (const grupo of grupos) {
-				for (const inc of grupo.incidencias) {
-					const fila = listaWrap.createDiv({ cls: "gf-sprint-fila" });
-					const cabecera = fila.createDiv({ cls: "gf-sprint-cabecera" });
-					if (inc.nivel > 0) cabecera.addClass("gf-incidencia-sub");
-					const chk = cabecera.createEl("input", { type: "checkbox" });
-					renderChipEtiqueta(cabecera, inc.tipoNombre, colorTipo(inc.tipoNombre));
-					cabecera.createEl("span", { text: inc.nombre, cls: "gf-sprint-nombre" });
-					if (grupo.origen) {
-						cabecera.createEl("span", { text: grupo.origen, cls: "gf-campo-aviso" });
-					}
-					this.filas.push({ file: inc.file, chk });
-				}
-			}
-			refrescarChecks();
 		};
+
+		// Al elegir épica/historia, precarga sus colaboradores actuales.
+		const sincronizar = () => {
+			const o = objetivo();
+			this.seleccion.clear();
+			if (o) {
+				for (const c of files.getAsignados(this.app, o.file)) {
+					if (colaboradores.some((x) => x.nombre === c)) this.seleccion.add(c);
+				}
+			}
+			aviso.setText(
+				o
+					? fn.getFn()
+						? `Se asignarán a la historia "${o.nombre}".`
+						: `Se asignarán a la épica "${o.nombre}".`
+					: "Selecciona una épica o historia."
+			);
+			reconstruir();
+			this.crearBtn.disabled = !o;
+		};
+		epica.select.addEventListener("change", sincronizar);
+		fn.select.addEventListener("change", sincronizar);
 
 		this.botones(async () => {
-			const f = epica.getFunc();
-			if (!f || this.seleccionados.size === 0) return;
+			const o = objetivo();
+			if (!o) {
+				this.mostrarError(epica, MSG_OBLIGATORIO);
+				return;
+			}
 			try {
-				for (const fila of this.filas) {
-					const previos = files.getAsignados(this.app, fila.file);
-					const actuales = new Set(previos);
-					if (fila.chk.checked) {
-						for (const c of this.seleccionados) actuales.add(c);
-					} else {
-						for (const c of this.seleccionados) actuales.delete(c);
-					}
-					if (actuales.size === previos.length && previos.every((p) => actuales.has(p))) {
-						continue;
-					}
-					await this.app.fileManager.processFrontMatter(fila.file, (fm: Record<string, unknown>) => {
-						fm.asignados = [...actuales].sort((a, b) => a.localeCompare(b, "es"));
-					});
-				}
+				const arr = [...this.seleccion].sort((a, b) => a.localeCompare(b, "es"));
+				await this.app.fileManager.processFrontMatter(o.file, (fm: Record<string, unknown>) => {
+					if (arr.length > 0) fm.asignados = arr;
+					else delete fm.asignados;
+				});
+				new Notice("Gestión de épicas: colaboradores asignados.");
 				this.close();
-				new Notice("Gestión de épicas: asignaciones guardadas.");
 			} catch (e) {
 				console.error(e);
 				new Notice("Gestión de épicas: error al guardar las asignaciones.");
 			}
 		}, "Guardar");
-		this.crearBtn.disabled = true;
 
-		fn.select.addEventListener("change", () => {
-			renderIncidencias();
-			actualizarBoton();
-		});
+		sincronizar();
 
 		if (funcs.length === 0) {
 			this.sinEpicas(epica);
@@ -1816,30 +1734,6 @@ export class CrearFuncionalidadNuevaModal extends GestorModal {
 			"Nombre de la historia",
 			"Escribe nombre de la historia"
 		);
-
-		// Selector de etiquetas de la épica elegida (se rehace al cambiar de épica).
-		const seleccion = new Set<string>();
-		const etqWrap = this.contentEl.createDiv({ cls: "gf-campo" });
-		etqWrap.createEl("label", { text: "Asignar etiquetas", cls: "gf-campo-label" });
-		const etqCont = etqWrap.createDiv();
-		const refrescarEtiquetas = () => {
-			etqCont.empty();
-			const ep = epica.getFunc();
-			const disponibles = ep
-				? files.leerEtiquetasEpica(this.app, ep).filter((e) => e.visible !== false)
-				: [];
-			for (const n of [...seleccion]) {
-				if (!disponibles.some((e) => e.nombre === n)) seleccion.delete(n);
-			}
-			crearSelectorEtiquetas({
-				parent: etqCont,
-				etiquetas: disponibles,
-				seleccion,
-				textoBtn: "Asignar etiquetas…",
-			});
-		};
-		epica.select.addEventListener("change", refrescarEtiquetas);
-		refrescarEtiquetas();
 
 		// Colaboradores asignados a la historia (su nota principal).
 		const colabSel = new Set<string>();
@@ -1879,13 +1773,10 @@ export class CrearFuncionalidadNuevaModal extends GestorModal {
 			if (!ok || !f) return;
 			try {
 				const file = await files.createFuncionalidadEn(this.app, f, valor);
-				if (seleccion.size > 0) {
-					await files.guardarEtiquetasHistoria(this.app, file, [...seleccion]);
-				}
 				await this.aplicarAsignados(file, [...colabSel]);
 				if (this.crearNuevo) {
-					// Se conserva la épica y las etiquetas elegidas; solo se limpia
-					// el nombre para crear la siguiente historia.
+					// Se conserva la épica; solo se limpia el nombre para crear la
+					// siguiente historia.
 					new Notice(`Gestión de épicas: historia "${valor}" creada.`);
 					nombre.input.value = "";
 					this.limpiarError(nombre);
