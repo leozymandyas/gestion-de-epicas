@@ -493,7 +493,11 @@ export class TareasColaboradorView extends ItemView {
 					e.preventDefault();
 					void this.app.workspace.getLeaf(false).openFile(inc.file);
 				});
-				li.appendText(` — ${inc.contexto} · ${this.estadoLegible(inc.file)}`);
+				// En documentos no se muestra el contexto (ya es el título del
+				// grupo) ni el estado (no aplica).
+				if (this.cfg.agruparPor === "colaborador") {
+					li.appendText(` — ${inc.contexto} · ${this.estadoLegible(inc.file)}`);
+				}
 			}
 		}
 	}

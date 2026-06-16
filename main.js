@@ -5359,7 +5359,9 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
           e.preventDefault();
           void this.app.workspace.getLeaf(false).openFile(inc.file);
         });
-        li.appendText(` \u2014 ${inc.contexto} \xB7 ${this.estadoLegible(inc.file)}`);
+        if (this.cfg.agruparPor === "colaborador") {
+          li.appendText(` \u2014 ${inc.contexto} \xB7 ${this.estadoLegible(inc.file)}`);
+        }
       }
     }
   }
