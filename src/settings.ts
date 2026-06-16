@@ -57,6 +57,8 @@ export interface GestorSettings {
 	ordenFunc: string[];
 	/** Orden manual de las incidencias en "Incidencias por colaborador" (rutas). */
 	ordenIncidenciasColab: string[];
+	/** Orden manual de las tarjetas (épica/historia) en el tablero de documentos. */
+	ordenGruposDocumentos: string[];
 	/** Sprint en curso elegido en el panel; sugiere filtros en roadmap/incidencias. */
 	sprintActual: { anio: number; sprint: number };
 	kanban: KanbanState;
@@ -112,6 +114,7 @@ export const DEFAULT_SETTINGS: GestorSettings = {
 	favoritos: [],
 	ordenFunc: [],
 	ordenIncidenciasColab: [],
+	ordenGruposDocumentos: [],
 	sprintActual: { anio: new Date().getFullYear(), sprint: 1 },
 	kanban: {
 		tareas: {},

@@ -1648,6 +1648,7 @@ var DEFAULT_SETTINGS = {
   favoritos: [],
   ordenFunc: [],
   ordenIncidenciasColab: [],
+  ordenGruposDocumentos: [],
   sprintActual: { anio: (/* @__PURE__ */ new Date()).getFullYear(), sprint: 1 },
   kanban: {
     tareas: {},
@@ -5163,8 +5164,26 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       }
     }
     if (this.cfg.agruparPor === "contexto") {
-      for (const clave of [...porContexto.keys()].sort((a, b) => a.localeCompare(b, "es"))) {
-        this.grupos.push({ clave, conProgreso: false, items: (_a = porContexto.get(clave)) != null ? _a : [] });
+      const orden = this.plugin.settings.ordenGruposDocumentos;
+      const idx = new Map(orden.map((c, i) => [c, i]));
+      const claves = [...porContexto.keys()].sort((a, b) => {
+        const ia = idx.get(a);
+        const ib = idx.get(b);
+        if (ia !== void 0 && ib !== void 0)
+          return ia - ib;
+        if (ia !== void 0)
+          return -1;
+        if (ib !== void 0)
+          return 1;
+        return a.localeCompare(b, "es");
+      });
+      for (const clave of claves) {
+        this.grupos.push({
+          clave,
+          conProgreso: false,
+          filtroClave: clave,
+          items: (_a = porContexto.get(clave)) != null ? _a : []
+        });
       }
     } else {
       for (const colab of visibles) {
@@ -5215,13 +5234,12 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
         if (this.cfg.agruparPor === "colaborador" && filtroColab.size > 0 && !(grupo.filtroClave && filtroColab.has(grupo.filtroClave))) {
           continue;
         }
-        const filtrados = visiblesDe(grupo.items);
-        const items = this.cfg.agruparPor === "colaborador" ? this.ordenarItems(filtrados) : filtrados;
+        const items = this.ordenarItems(visiblesDe(grupo.items));
         if (items.length === 0 && this.cfg.agruparPor === "contexto")
           continue;
         if (items.length === 0 && grupo.filtroClave === SIN_ASIGNAR)
           continue;
-        const dragClave = this.cfg.agruparPor === "colaborador" && grupo.filtroClave && grupo.filtroClave !== SIN_ASIGNAR ? grupo.filtroClave : void 0;
+        const dragClave = grupo.filtroClave && grupo.filtroClave !== SIN_ASIGNAR ? grupo.filtroClave : void 0;
         this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso, dragClave);
         algo = true;
       }
@@ -5385,7 +5403,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       for (const inc of aMostrar) {
         const completado = this.estadoDe(inc.file) === "completado";
         const li = ul.createEl("li", { cls: completado ? "gf-colab-hecha" : "" });
-        if (this.cfg.agruparPor === "colaborador") {
+        {
           li.draggable = true;
           li.addClass("gf-arrastrable");
           li.addEventListener("dragstart", (e) => {
@@ -5513,9 +5531,23 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     await this.plugin.saveSettings();
     await this.recargar();
   }
-  /** Reordena los colaboradores (orden de las tarjetas) moviendo `clave` antes
-   * de `beforeClave`. Persiste en settings.colaboradores. */
+  /** Reordena las tarjetas moviendo `clave` antes de `beforeClave`. En modo
+   * colaborador reordena settings.colaboradores; en documentos, el orden de
+   * grupos (épica/historia) guardado. */
   async moverGrupo(clave, beforeClave) {
+    if (this.cfg.agruparPor === "contexto") {
+      const actuales = this.grupos.map((g) => g.clave);
+      const orden = actuales.filter((c) => c !== clave);
+      const pos2 = orden.indexOf(beforeClave);
+      if (pos2 === -1)
+        orden.push(clave);
+      else
+        orden.splice(pos2, 0, clave);
+      this.plugin.settings.ordenGruposDocumentos = orden;
+      await this.plugin.saveSettings();
+      await this.recargar();
+      return;
+    }
     const cols = this.plugin.settings.colaboradores;
     const i = cols.findIndex((c) => c.nombre === clave);
     if (i < 0)
@@ -5919,7 +5951,7 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
     await this.app.workspace.revealLeaf(hoja);
   }
   async loadSettings() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
     const guardado = await this.loadData();
     const primeraVez = guardado === null || guardado === void 0;
     const data = guardado != null ? guardado : {};
@@ -5982,14 +6014,15 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
       favoritos,
       ordenFunc: ((_f = data.ordenFunc) != null ? _f : []).map(String),
       ordenIncidenciasColab: ((_g = data.ordenIncidenciasColab) != null ? _g : []).map(String),
+      ordenGruposDocumentos: ((_h = data.ordenGruposDocumentos) != null ? _h : []).map(String),
       sprintActual: {
-        anio: anioValido((_h = data.sprintActual) == null ? void 0 : _h.anio),
-        sprint: enRango((_i = data.sprintActual) == null ? void 0 : _i.sprint, 1)
+        anio: anioValido((_i = data.sprintActual) == null ? void 0 : _i.anio),
+        sprint: enRango((_j = data.sprintActual) == null ? void 0 : _j.sprint, 1)
       },
       kanban: {
-        tareas: { ...(_k = (_j = data.kanban) == null ? void 0 : _j.tareas) != null ? _k : {} },
-        pendientes: { ...(_m = (_l = data.kanban) == null ? void 0 : _l.pendientes) != null ? _m : {} },
-        ordenIncidencias: ((_o = (_n = data.kanban) == null ? void 0 : _n.ordenIncidencias) != null ? _o : []).map(String),
+        tareas: { ...(_l = (_k = data.kanban) == null ? void 0 : _k.tareas) != null ? _l : {} },
+        pendientes: { ...(_n = (_m = data.kanban) == null ? void 0 : _m.pendientes) != null ? _n : {} },
+        ordenIncidencias: ((_p = (_o = data.kanban) == null ? void 0 : _o.ordenIncidencias) != null ? _p : []).map(String),
         filtroSprints: {
           desde: enRango(filtro == null ? void 0 : filtro.desde, 1),
           hasta: enRango(filtro == null ? void 0 : filtro.hasta, numSprints)

@@ -254,8 +254,24 @@ export class TareasColaboradorView extends ItemView {
 		}
 
 		if (this.cfg.agruparPor === "contexto") {
-			for (const clave of [...porContexto.keys()].sort((a, b) => a.localeCompare(b, "es"))) {
-				this.grupos.push({ clave, conProgreso: false, items: porContexto.get(clave) ?? [] });
+			// Orden manual guardado; las no listadas, alfabéticas al final.
+			const orden = this.plugin.settings.ordenGruposDocumentos;
+			const idx = new Map(orden.map((c, i) => [c, i] as const));
+			const claves = [...porContexto.keys()].sort((a, b) => {
+				const ia = idx.get(a);
+				const ib = idx.get(b);
+				if (ia !== undefined && ib !== undefined) return ia - ib;
+				if (ia !== undefined) return -1;
+				if (ib !== undefined) return 1;
+				return a.localeCompare(b, "es");
+			});
+			for (const clave of claves) {
+				this.grupos.push({
+					clave,
+					conProgreso: false,
+					filtroClave: clave,
+					items: porContexto.get(clave) ?? [],
+				});
 			}
 		} else {
 			for (const colab of visibles) {
@@ -321,18 +337,15 @@ export class TareasColaboradorView extends ItemView {
 				) {
 					continue;
 				}
-				const filtrados = visiblesDe(grupo.items);
-				const items =
-					this.cfg.agruparPor === "colaborador" ? this.ordenarItems(filtrados) : filtrados;
+				const items = this.ordenarItems(visiblesDe(grupo.items));
 				// Los grupos vacíos solo se muestran en modo colaborador (cada
 				// colaborador tiene su tarjeta aunque no tenga elementos).
 				if (items.length === 0 && this.cfg.agruparPor === "contexto") continue;
 				if (items.length === 0 && grupo.filtroClave === SIN_ASIGNAR) continue;
-				// Las tarjetas de colaborador (no "Sin asignar") se pueden reordenar.
+				// Tarjetas reordenables: colaboradores (no "Sin asignar") y, en
+				// documentos, las épicas/historias.
 				const dragClave =
-					this.cfg.agruparPor === "colaborador" &&
-					grupo.filtroClave &&
-					grupo.filtroClave !== SIN_ASIGNAR
+					grupo.filtroClave && grupo.filtroClave !== SIN_ASIGNAR
 						? grupo.filtroClave
 						: undefined;
 				this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso, dragClave);
@@ -525,8 +538,8 @@ export class TareasColaboradorView extends ItemView {
 				const completado = this.estadoDe(inc.file) === "completado";
 				const li = ul.createEl("li", { cls: completado ? "gf-colab-hecha" : "" });
 
-				// Reordenar incidencias dentro de la tarjeta (arrastrar una sobre otra).
-				if (this.cfg.agruparPor === "colaborador") {
+				// Reordenar elementos dentro de la tarjeta (arrastrar uno sobre otro).
+				{
 					li.draggable = true;
 					li.addClass("gf-arrastrable");
 					li.addEventListener("dragstart", (e) => {
@@ -653,9 +666,22 @@ export class TareasColaboradorView extends ItemView {
 		await this.recargar();
 	}
 
-	/** Reordena los colaboradores (orden de las tarjetas) moviendo `clave` antes
-	 * de `beforeClave`. Persiste en settings.colaboradores. */
+	/** Reordena las tarjetas moviendo `clave` antes de `beforeClave`. En modo
+	 * colaborador reordena settings.colaboradores; en documentos, el orden de
+	 * grupos (épica/historia) guardado. */
 	private async moverGrupo(clave: string, beforeClave: string): Promise<void> {
+		if (this.cfg.agruparPor === "contexto") {
+			// Parte del orden actual de los grupos (ya ordenados) para que sea estable.
+			const actuales = this.grupos.map((g) => g.clave);
+			const orden = actuales.filter((c) => c !== clave);
+			const pos = orden.indexOf(beforeClave);
+			if (pos === -1) orden.push(clave);
+			else orden.splice(pos, 0, clave);
+			this.plugin.settings.ordenGruposDocumentos = orden;
+			await this.plugin.saveSettings();
+			await this.recargar();
+			return;
+		}
 		const cols = this.plugin.settings.colaboradores;
 		const i = cols.findIndex((c) => c.nombre === clave);
 		if (i < 0) return;
