@@ -5070,15 +5070,13 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
         this.epicaSeleccion.add(epicaNombre);
       }
       for (const inc of this.listar(ref)) {
-        const asignados = getAsignados(this.app, inc.file);
         const item = { ...inc, contexto, epicaNombre };
+        const asignados = getAsignados(this.app, inc.file).filter((n) => nombresVisibles.has(n));
         if (asignados.length === 0) {
           this.sinAsignar.push(item);
           continue;
         }
         for (const nombre of asignados) {
-          if (!nombresVisibles.has(nombre))
-            continue;
           const lista = (_a = this.porColaborador.get(nombre)) != null ? _a : [];
           lista.push(item);
           this.porColaborador.set(nombre, lista);
@@ -5258,9 +5256,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     } else {
       head.createEl("span", { cls: "gf-colab-conteo", text: `${incidencias.length}` });
     }
-    const aMostrar = incidencias.filter(
-      (i) => this.verCompletadas || this.estadoDe(i.file) !== "completado"
-    );
+    const aMostrar = this.cfg.conMarcarHecha && !this.verCompletadas ? incidencias.filter((i) => this.estadoDe(i.file) !== "completado") : incidencias;
     if (aMostrar.length > 0) {
       const ul = tarjeta.createEl("ul", { cls: "gf-colab-lista" });
       for (const inc of aMostrar) {

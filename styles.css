@@ -228,6 +228,12 @@
 	justify-content: flex-end;
 	gap: 8px;
 	margin-top: 12px;
+	/* Fija los botones al fondo visible del modal aunque haya que hacer scroll. */
+	position: sticky;
+	bottom: 0;
+	background: var(--background-primary);
+	padding: 10px 0 2px;
+	z-index: 2;
 }
 
 /* --- Vista unificada (dashboard) --- */

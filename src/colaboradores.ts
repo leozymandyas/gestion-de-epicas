@@ -161,14 +161,15 @@ export class TareasColaboradorView extends ItemView {
 				this.epicaSeleccion.add(epicaNombre);
 			}
 			for (const inc of this.listar(ref)) {
-				const asignados = getAsignados(this.app, inc.file);
 				const item: IncidenciaAsignada = { ...inc, contexto, epicaNombre };
+				// Solo cuentan los colaboradores activos; si no queda ninguno, va a
+				// "sin asignar" (para que el elemento nunca desaparezca).
+				const asignados = getAsignados(this.app, inc.file).filter((n) => nombresVisibles.has(n));
 				if (asignados.length === 0) {
 					this.sinAsignar.push(item);
 					continue;
 				}
 				for (const nombre of asignados) {
-					if (!nombresVisibles.has(nombre)) continue;
 					const lista = this.porColaborador.get(nombre) ?? [];
 					lista.push(item);
 					this.porColaborador.set(nombre, lista);
@@ -381,10 +382,12 @@ export class TareasColaboradorView extends ItemView {
 			head.createEl("span", { cls: "gf-colab-conteo", text: `${incidencias.length}` });
 		}
 
-		// Las completadas se muestran tachadas (si "ver completadas") u ocultas.
-		const aMostrar = incidencias.filter(
-			(i) => this.verCompletadas || this.estadoDe(i.file) !== "completado"
-		);
+		// Solo en incidencias: las completadas se ocultan salvo "ver completadas".
+		// En documentos no se filtra por estado.
+		const aMostrar =
+			this.cfg.conMarcarHecha && !this.verCompletadas
+				? incidencias.filter((i) => this.estadoDe(i.file) !== "completado")
+				: incidencias;
 		if (aMostrar.length > 0) {
 			const ul = tarjeta.createEl("ul", { cls: "gf-colab-lista" });
 			for (const inc of aMostrar) {
