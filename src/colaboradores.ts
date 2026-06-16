@@ -87,6 +87,8 @@ export class TareasColaboradorView extends ItemView {
 	private epicaConocidas = new Set<string>();
 	/** Mostrar incidencias completadas (tachadas). Marcado por defecto. */
 	private verCompletadas = true;
+	/** Arrastre en curso (reordenar tarjetas de colaborador o incidencias). */
+	private arrastre: { tipo: "grupo" | "item"; valor: string } | null = null;
 	/** Grupos a pintar (por colaborador o por épica/historia, según config). */
 	private grupos: Array<{
 		clave: string;
@@ -316,12 +318,21 @@ export class TareasColaboradorView extends ItemView {
 				) {
 					continue;
 				}
-				const items = visiblesDe(grupo.items);
+				const filtrados = visiblesDe(grupo.items);
+				const items =
+					this.cfg.agruparPor === "colaborador" ? this.ordenarItems(filtrados) : filtrados;
 				// Los grupos vacíos solo se muestran en modo colaborador (cada
 				// colaborador tiene su tarjeta aunque no tenga elementos).
 				if (items.length === 0 && this.cfg.agruparPor === "contexto") continue;
 				if (items.length === 0 && grupo.filtroClave === SIN_ASIGNAR) continue;
-				this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso);
+				// Las tarjetas de colaborador (no "Sin asignar") se pueden reordenar.
+				const dragClave =
+					this.cfg.agruparPor === "colaborador" &&
+					grupo.filtroClave &&
+					grupo.filtroClave !== SIN_ASIGNAR
+						? grupo.filtroClave
+						: undefined;
+				this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso, dragClave);
 				algo = true;
 			}
 
@@ -444,7 +455,8 @@ export class TareasColaboradorView extends ItemView {
 		titulo: string,
 		incidencias: IncidenciaAsignada[],
 		color: string | undefined,
-		conProgreso: boolean
+		conProgreso: boolean,
+		dragClave?: string
 	): void {
 		const tarjeta = cuerpo.createDiv({ cls: "gf-colab-card" });
 
@@ -454,6 +466,32 @@ export class TareasColaboradorView extends ItemView {
 			punto.setCssStyles({ backgroundColor: color });
 		}
 		head.createEl("span", { text: titulo, cls: "gf-colab-nombre" });
+
+		// Reordenar tarjetas de colaborador: la cabecera es el asa de arrastre y la
+		// tarjeta es zona de soltado (inserta la arrastrada antes de esta).
+		if (dragClave) {
+			head.addClass("gf-arrastrable");
+			head.draggable = true;
+			head.addEventListener("dragstart", () => {
+				this.arrastre = { tipo: "grupo", valor: dragClave };
+			});
+			head.addEventListener("dragend", () => {
+				this.arrastre = null;
+			});
+			tarjeta.addEventListener("dragover", (e) => {
+				if (this.arrastre?.tipo !== "grupo") return;
+				e.preventDefault();
+				tarjeta.addClass("gf-drop-card");
+			});
+			tarjeta.addEventListener("dragleave", () => tarjeta.removeClass("gf-drop-card"));
+			tarjeta.addEventListener("drop", (e) => {
+				if (this.arrastre?.tipo !== "grupo") return;
+				e.preventDefault();
+				tarjeta.removeClass("gf-drop-card");
+				const origen = this.arrastre.valor;
+				if (origen !== dragClave) void this.moverGrupo(origen, dragClave);
+			});
+		}
 
 		if (conProgreso) {
 			const hechas = incidencias.filter((i) => this.estadoDe(i.file) === "completado").length;
@@ -483,6 +521,34 @@ export class TareasColaboradorView extends ItemView {
 			for (const inc of aMostrar) {
 				const completado = this.estadoDe(inc.file) === "completado";
 				const li = ul.createEl("li", { cls: completado ? "gf-colab-hecha" : "" });
+
+				// Reordenar incidencias dentro de la tarjeta (arrastrar una sobre otra).
+				if (this.cfg.agruparPor === "colaborador") {
+					li.draggable = true;
+					li.addClass("gf-arrastrable");
+					li.addEventListener("dragstart", (e) => {
+						this.arrastre = { tipo: "item", valor: inc.file.path };
+						e.stopPropagation();
+					});
+					li.addEventListener("dragend", () => {
+						this.arrastre = null;
+					});
+					li.addEventListener("dragover", (e) => {
+						if (this.arrastre?.tipo !== "item") return;
+						e.preventDefault();
+						e.stopPropagation();
+						li.addClass("gf-drop-card");
+					});
+					li.addEventListener("dragleave", () => li.removeClass("gf-drop-card"));
+					li.addEventListener("drop", (e) => {
+						if (this.arrastre?.tipo !== "item") return;
+						e.preventDefault();
+						e.stopPropagation();
+						li.removeClass("gf-drop-card");
+						const origen = this.arrastre.valor;
+						if (origen !== inc.file.path) void this.moverItem(origen, inc.file.path);
+					});
+				}
 
 				if (this.cfg.conMarcarHecha) {
 					const chk = li.createEl("input", { type: "checkbox", cls: "gf-colab-chk" });
@@ -520,10 +586,10 @@ export class TareasColaboradorView extends ItemView {
 					e.preventDefault();
 					void this.app.workspace.getLeaf(false).openFile(inc.file);
 				});
-				// En documentos no se muestra el contexto (ya es el título del
-				// grupo) ni el estado (no aplica).
+				// En documentos el contexto ya es el título del grupo; en
+				// incidencias mostramos solo la épica/historia (sin el estado).
 				if (this.cfg.agruparPor === "colaborador") {
-					li.appendText(` — ${inc.contexto} · ${this.estadoLegible(inc.file)}`);
+					li.appendText(` — ${inc.contexto}`);
 				}
 			}
 		}
@@ -541,9 +607,59 @@ export class TareasColaboradorView extends ItemView {
 		return estado ? normalizarEstado(String(estado)) : "por-hacer";
 	}
 
-	private estadoLegible(file: TFile): string {
-		const v = this.estadoDe(file);
-		return this.plugin.settings.carriles.find((e) => e.valor === v)?.nombre ?? v;
+	// ===== Reordenamiento manual =====
+
+	/** Ordena las incidencias según el orden manual guardado; las no listadas
+	 * conservan su orden de recolección. */
+	private ordenarItems(items: IncidenciaAsignada[]): IncidenciaAsignada[] {
+		const orden = this.plugin.settings.ordenIncidenciasColab;
+		const idx = new Map(orden.map((p, i) => [p, i] as const));
+		return [...items].sort((a, b) => {
+			const ia = idx.get(a.file.path);
+			const ib = idx.get(b.file.path);
+			if (ia !== undefined && ib !== undefined) return ia - ib;
+			if (ia !== undefined) return -1;
+			if (ib !== undefined) return 1;
+			return 0;
+		});
+	}
+
+	/** Reubica `path` antes de `beforeKey` en el orden manual de incidencias.
+	 * Reconstruye con todas las incidencias visibles para que el orden sea estable. */
+	private async moverItem(path: string, beforeKey: string): Promise<void> {
+		const orden = this.plugin.settings.ordenIncidenciasColab;
+		const idx = new Map(orden.map((p, i) => [p, i] as const));
+		const todas = [...new Set(this.grupos.flatMap((g) => g.items.map((i) => i.file.path)))].sort(
+			(a, b) => {
+				const ia = idx.get(a);
+				const ib = idx.get(b);
+				if (ia !== undefined && ib !== undefined) return ia - ib;
+				if (ia !== undefined) return -1;
+				if (ib !== undefined) return 1;
+				return 0;
+			}
+		);
+		const lista = todas.filter((p) => p !== path);
+		const pos = lista.indexOf(beforeKey);
+		if (pos === -1) lista.push(path);
+		else lista.splice(pos, 0, path);
+		this.plugin.settings.ordenIncidenciasColab = lista;
+		await this.plugin.saveSettings();
+		await this.recargar();
+	}
+
+	/** Reordena los colaboradores (orden de las tarjetas) moviendo `clave` antes
+	 * de `beforeClave`. Persiste en settings.colaboradores. */
+	private async moverGrupo(clave: string, beforeClave: string): Promise<void> {
+		const cols = this.plugin.settings.colaboradores;
+		const i = cols.findIndex((c) => c.nombre === clave);
+		if (i < 0) return;
+		const [item] = cols.splice(i, 1);
+		const pos = cols.findIndex((c) => c.nombre === beforeClave);
+		if (pos === -1) cols.push(item);
+		else cols.splice(pos, 0, item);
+		await this.plugin.saveSettings();
+		await this.recargar();
 	}
 }
 

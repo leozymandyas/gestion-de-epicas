@@ -55,6 +55,8 @@ export interface GestorSettings {
 	favoritos: string[];
 	/** Orden manual de las tarjetas en el gestor de funcionalidades (rutas en orden). */
 	ordenFunc: string[];
+	/** Orden manual de las incidencias en "Incidencias por colaborador" (rutas). */
+	ordenIncidenciasColab: string[];
 	/** Sprint en curso elegido en el panel; sugiere filtros en roadmap/incidencias. */
 	sprintActual: { anio: number; sprint: number };
 	kanban: KanbanState;
@@ -109,6 +111,7 @@ export const DEFAULT_SETTINGS: GestorSettings = {
 	numSprints: NUM_SPRINTS_DEFECTO,
 	favoritos: [],
 	ordenFunc: [],
+	ordenIncidenciasColab: [],
 	sprintActual: { anio: new Date().getFullYear(), sprint: 1 },
 	kanban: {
 		tareas: {},

@@ -545,6 +545,7 @@ export default class GestorFuncionesPlugin extends Plugin {
 			numSprints,
 			favoritos,
 			ordenFunc: (data.ordenFunc ?? []).map(String),
+			ordenIncidenciasColab: (data.ordenIncidenciasColab ?? []).map(String),
 			sprintActual: {
 				anio: anioValido(data.sprintActual?.anio),
 				sprint: enRango(data.sprintActual?.sprint, 1),

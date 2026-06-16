@@ -1647,6 +1647,7 @@ var DEFAULT_SETTINGS = {
   numSprints: NUM_SPRINTS_DEFECTO,
   favoritos: [],
   ordenFunc: [],
+  ordenIncidenciasColab: [],
   sprintActual: { anio: (/* @__PURE__ */ new Date()).getFullYear(), sprint: 1 },
   kanban: {
     tareas: {},
@@ -5014,6 +5015,8 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     this.epicaConocidas = /* @__PURE__ */ new Set();
     /** Mostrar incidencias completadas (tachadas). Marcado por defecto. */
     this.verCompletadas = true;
+    /** Arrastre en curso (reordenar tarjetas de colaborador o incidencias). */
+    this.arrastre = null;
     /** Grupos a pintar (por colaborador o por épica/historia, según config). */
     this.grupos = [];
     this.plugin = plugin;
@@ -5211,12 +5214,14 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
         if (this.cfg.agruparPor === "colaborador" && filtroColab.size > 0 && !(grupo.filtroClave && filtroColab.has(grupo.filtroClave))) {
           continue;
         }
-        const items = visiblesDe(grupo.items);
+        const filtrados = visiblesDe(grupo.items);
+        const items = this.cfg.agruparPor === "colaborador" ? this.ordenarItems(filtrados) : filtrados;
         if (items.length === 0 && this.cfg.agruparPor === "contexto")
           continue;
         if (items.length === 0 && grupo.filtroClave === SIN_ASIGNAR)
           continue;
-        this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso);
+        const dragClave = this.cfg.agruparPor === "colaborador" && grupo.filtroClave && grupo.filtroClave !== SIN_ASIGNAR ? grupo.filtroClave : void 0;
+        this.renderTarjetaGrupo(cuerpo, grupo.clave, items, grupo.color, grupo.conProgreso, dragClave);
         algo = true;
       }
       if (!algo) {
@@ -5321,7 +5326,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     var _a, _b;
     return (_b = (_a = this.cfg.registro(this.plugin).find((i) => i.nombre === nombre)) == null ? void 0 : _a.color) != null ? _b : "#B9BEC6";
   }
-  renderTarjetaGrupo(cuerpo, titulo, incidencias, color, conProgreso) {
+  renderTarjetaGrupo(cuerpo, titulo, incidencias, color, conProgreso, dragClave) {
     const tarjeta = cuerpo.createDiv({ cls: "gf-colab-card" });
     const head = tarjeta.createDiv({ cls: "gf-colab-head" });
     if (color) {
@@ -5329,6 +5334,34 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       punto.setCssStyles({ backgroundColor: color });
     }
     head.createEl("span", { text: titulo, cls: "gf-colab-nombre" });
+    if (dragClave) {
+      head.addClass("gf-arrastrable");
+      head.draggable = true;
+      head.addEventListener("dragstart", () => {
+        this.arrastre = { tipo: "grupo", valor: dragClave };
+      });
+      head.addEventListener("dragend", () => {
+        this.arrastre = null;
+      });
+      tarjeta.addEventListener("dragover", (e) => {
+        var _a;
+        if (((_a = this.arrastre) == null ? void 0 : _a.tipo) !== "grupo")
+          return;
+        e.preventDefault();
+        tarjeta.addClass("gf-drop-card");
+      });
+      tarjeta.addEventListener("dragleave", () => tarjeta.removeClass("gf-drop-card"));
+      tarjeta.addEventListener("drop", (e) => {
+        var _a;
+        if (((_a = this.arrastre) == null ? void 0 : _a.tipo) !== "grupo")
+          return;
+        e.preventDefault();
+        tarjeta.removeClass("gf-drop-card");
+        const origen = this.arrastre.valor;
+        if (origen !== dragClave)
+          void this.moverGrupo(origen, dragClave);
+      });
+    }
     if (conProgreso) {
       const hechas = incidencias.filter((i) => this.estadoDe(i.file) === "completado").length;
       const total = incidencias.length;
@@ -5351,6 +5384,37 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
       for (const inc of aMostrar) {
         const completado = this.estadoDe(inc.file) === "completado";
         const li = ul.createEl("li", { cls: completado ? "gf-colab-hecha" : "" });
+        if (this.cfg.agruparPor === "colaborador") {
+          li.draggable = true;
+          li.addClass("gf-arrastrable");
+          li.addEventListener("dragstart", (e) => {
+            this.arrastre = { tipo: "item", valor: inc.file.path };
+            e.stopPropagation();
+          });
+          li.addEventListener("dragend", () => {
+            this.arrastre = null;
+          });
+          li.addEventListener("dragover", (e) => {
+            var _a;
+            if (((_a = this.arrastre) == null ? void 0 : _a.tipo) !== "item")
+              return;
+            e.preventDefault();
+            e.stopPropagation();
+            li.addClass("gf-drop-card");
+          });
+          li.addEventListener("dragleave", () => li.removeClass("gf-drop-card"));
+          li.addEventListener("drop", (e) => {
+            var _a;
+            if (((_a = this.arrastre) == null ? void 0 : _a.tipo) !== "item")
+              return;
+            e.preventDefault();
+            e.stopPropagation();
+            li.removeClass("gf-drop-card");
+            const origen = this.arrastre.valor;
+            if (origen !== inc.file.path)
+              void this.moverItem(origen, inc.file.path);
+          });
+        }
         if (this.cfg.conMarcarHecha) {
           const chk = li.createEl("input", { type: "checkbox", cls: "gf-colab-chk" });
           chk.checked = completado;
@@ -5387,7 +5451,7 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
           void this.app.workspace.getLeaf(false).openFile(inc.file);
         });
         if (this.cfg.agruparPor === "colaborador") {
-          li.appendText(` \u2014 ${inc.contexto} \xB7 ${this.estadoLegible(inc.file)}`);
+          li.appendText(` \u2014 ${inc.contexto}`);
         }
       }
     }
@@ -5403,10 +5467,67 @@ var TareasColaboradorView = class extends import_obsidian12.ItemView {
     const estado = (_b = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b.estado;
     return estado ? normalizarEstado(String(estado)) : "por-hacer";
   }
-  estadoLegible(file) {
-    var _a, _b;
-    const v = this.estadoDe(file);
-    return (_b = (_a = this.plugin.settings.carriles.find((e) => e.valor === v)) == null ? void 0 : _a.nombre) != null ? _b : v;
+  // ===== Reordenamiento manual =====
+  /** Ordena las incidencias según el orden manual guardado; las no listadas
+   * conservan su orden de recolección. */
+  ordenarItems(items) {
+    const orden = this.plugin.settings.ordenIncidenciasColab;
+    const idx = new Map(orden.map((p, i) => [p, i]));
+    return [...items].sort((a, b) => {
+      const ia = idx.get(a.file.path);
+      const ib = idx.get(b.file.path);
+      if (ia !== void 0 && ib !== void 0)
+        return ia - ib;
+      if (ia !== void 0)
+        return -1;
+      if (ib !== void 0)
+        return 1;
+      return 0;
+    });
+  }
+  /** Reubica `path` antes de `beforeKey` en el orden manual de incidencias.
+   * Reconstruye con todas las incidencias visibles para que el orden sea estable. */
+  async moverItem(path, beforeKey) {
+    const orden = this.plugin.settings.ordenIncidenciasColab;
+    const idx = new Map(orden.map((p, i) => [p, i]));
+    const todas = [...new Set(this.grupos.flatMap((g) => g.items.map((i) => i.file.path)))].sort(
+      (a, b) => {
+        const ia = idx.get(a);
+        const ib = idx.get(b);
+        if (ia !== void 0 && ib !== void 0)
+          return ia - ib;
+        if (ia !== void 0)
+          return -1;
+        if (ib !== void 0)
+          return 1;
+        return 0;
+      }
+    );
+    const lista = todas.filter((p) => p !== path);
+    const pos = lista.indexOf(beforeKey);
+    if (pos === -1)
+      lista.push(path);
+    else
+      lista.splice(pos, 0, path);
+    this.plugin.settings.ordenIncidenciasColab = lista;
+    await this.plugin.saveSettings();
+    await this.recargar();
+  }
+  /** Reordena los colaboradores (orden de las tarjetas) moviendo `clave` antes
+   * de `beforeClave`. Persiste en settings.colaboradores. */
+  async moverGrupo(clave, beforeClave) {
+    const cols = this.plugin.settings.colaboradores;
+    const i = cols.findIndex((c) => c.nombre === clave);
+    if (i < 0)
+      return;
+    const [item] = cols.splice(i, 1);
+    const pos = cols.findIndex((c) => c.nombre === beforeClave);
+    if (pos === -1)
+      cols.push(item);
+    else
+      cols.splice(pos, 0, item);
+    await this.plugin.saveSettings();
+    await this.recargar();
   }
 };
 var ConfirmacionModal = class extends import_obsidian12.Modal {
@@ -5798,7 +5919,7 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
     await this.app.workspace.revealLeaf(hoja);
   }
   async loadSettings() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
     const guardado = await this.loadData();
     const primeraVez = guardado === null || guardado === void 0;
     const data = guardado != null ? guardado : {};
@@ -5860,14 +5981,15 @@ var GestorFuncionesPlugin = class extends import_obsidian13.Plugin {
       numSprints,
       favoritos,
       ordenFunc: ((_f = data.ordenFunc) != null ? _f : []).map(String),
+      ordenIncidenciasColab: ((_g = data.ordenIncidenciasColab) != null ? _g : []).map(String),
       sprintActual: {
-        anio: anioValido((_g = data.sprintActual) == null ? void 0 : _g.anio),
-        sprint: enRango((_h = data.sprintActual) == null ? void 0 : _h.sprint, 1)
+        anio: anioValido((_h = data.sprintActual) == null ? void 0 : _h.anio),
+        sprint: enRango((_i = data.sprintActual) == null ? void 0 : _i.sprint, 1)
       },
       kanban: {
-        tareas: { ...(_j = (_i = data.kanban) == null ? void 0 : _i.tareas) != null ? _j : {} },
-        pendientes: { ...(_l = (_k = data.kanban) == null ? void 0 : _k.pendientes) != null ? _l : {} },
-        ordenIncidencias: ((_n = (_m = data.kanban) == null ? void 0 : _m.ordenIncidencias) != null ? _n : []).map(String),
+        tareas: { ...(_k = (_j = data.kanban) == null ? void 0 : _j.tareas) != null ? _k : {} },
+        pendientes: { ...(_m = (_l = data.kanban) == null ? void 0 : _l.pendientes) != null ? _m : {} },
+        ordenIncidencias: ((_o = (_n = data.kanban) == null ? void 0 : _n.ordenIncidencias) != null ? _o : []).map(String),
         filtroSprints: {
           desde: enRango(filtro == null ? void 0 : filtro.desde, 1),
           hasta: enRango(filtro == null ? void 0 : filtro.hasta, numSprints)
