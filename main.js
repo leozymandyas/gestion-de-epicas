@@ -22,7 +22,7 @@ __export(main_exports, {
   default: () => GestorFuncionesPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian21 = require("obsidian");
+var import_obsidian22 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian4 = require("obsidian");
@@ -357,6 +357,12 @@ function listFuncionalidades(app, adminPath) {
     });
   }
   return out.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+function listFuncionalidadesVisibles(app, adminPath, ocultas) {
+  const set = ocultas instanceof Set ? ocultas : new Set(ocultas);
+  if (set.size === 0)
+    return listFuncionalidades(app, adminPath);
+  return listFuncionalidades(app, adminPath).filter((f) => !set.has(f.slug));
 }
 function listFuncionalidadesDe(app, epicaFolder) {
   var _a;
@@ -1760,6 +1766,8 @@ var DEFAULT_SETTINGS = {
   ordenIncidenciasColab: [],
   ordenGruposDocumentos: [],
   organizacionDocs: {},
+  epicasOcultas: [],
+  ultimaEpicaVista: {},
   sprintActual: { anio: (/* @__PURE__ */ new Date()).getFullYear(), sprint: 1 },
   kanban: {
     tareas: {},
@@ -1776,6 +1784,11 @@ var GestorSettingTab = class extends import_obsidian4.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
+    new import_obsidian4.Setting(containerEl).setName("Documentaci\xF3n").setDesc("Aprende a usar el plugin con la gu\xEDa completa en la web.").addButton(
+      (btn) => btn.setButtonText("Documentaci\xF3n").setCta().onClick(() => {
+        window.open("https://www.anatomia-del-producto.com/gestion-de-epicas/");
+      })
+    );
     new import_obsidian4.Setting(containerEl).setName("Configuraci\xF3n del Sprint").setHeading();
     this.renderSprintCard(containerEl);
     this.renderTarjeta(
@@ -2296,6 +2309,7 @@ var REGISTRO = [
   { id: "asignar-etiquetas", icono: "tag", texto: "Etiquetas de historias", accion: (p) => void p.abrirEtiquetarHistorias() },
   { id: "mover-historia", icono: "folder-tree", texto: "Historias por \xE9pica", accion: (p) => void p.abrirHistorias() },
   { id: "mover-historias-tablero", icono: "folder-symlink", texto: "Mover historias", accion: (p) => void p.abrirMoverHistorias() },
+  { id: "mostrar-ocultar-epicas", icono: "eye", texto: "Mostrar/Ocultar \xE9picas", accion: (p) => p.abrirMostrarOcultarEpicas() },
   { id: "archivar-epica", icono: "archive", texto: "Archivar \xE9picas", accion: (p) => p.abrirModal("mover") },
   { id: "eliminar-epica-historia", icono: "trash-2", texto: "Eliminar \xE9pica o historia", accion: (p) => p.abrirModal("eliminarEpicaHistoria") },
   // Épicas — tableros
@@ -2326,7 +2340,7 @@ var SECCIONES_PANEL = [
   { id: "epicas-sprints", titulo: "Sprints y roadmap", acciones: ["asignar-sprint", "roadmap", "gestor-funcionalidades"] },
   { id: "epicas-historias", titulo: "Historias", acciones: ["mover-historia", "mover-historias-tablero", "asignar-etiquetas"] },
   { id: "epicas-colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
-  { id: "epicas-acciones", titulo: "Acciones", acciones: ["archivar-epica", "eliminar-epica-historia"] },
+  { id: "epicas-acciones", titulo: "Acciones", acciones: ["mostrar-ocultar-epicas", "archivar-epica", "eliminar-epica-historia"] },
   // Pestaña Incidencias.
   { id: "inc-crear", titulo: "Crear", acciones: ["crear-incidencia"] },
   { id: "inc-tableros", titulo: "Tableros", acciones: ["incidencias-por-colaborador", "mover-incidencias", "reclasificar-incidencias"] },
@@ -2912,7 +2926,11 @@ var CrearTareaModal = class extends GestorModal {
   }
   onOpen() {
     this.titleEl.setText("Crear tarea");
-    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+    const funcs = listFuncionalidadesVisibles(
+      this.app,
+      this.plugin.settings.carpetaAdmin,
+      this.plugin.settings.epicasOcultas
+    );
     const func = this.campoEpica(funcs);
     const fn = this.campoFuncionalidad(func);
     const nombre = this.campoTexto("Nombre de la tarea", "Escribe nombre de la tarea");
@@ -2979,7 +2997,11 @@ var CrearIncidenciaModal = class extends GestorModal {
   }
   onOpen() {
     this.titleEl.setText(this.cfg.titulo);
-    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+    const funcs = listFuncionalidadesVisibles(
+      this.app,
+      this.plugin.settings.carpetaAdmin,
+      this.plugin.settings.epicasOcultas
+    );
     const func = this.campoEpica(funcs);
     const fn = this.cfg.soloEpica ? null : this.campoFuncionalidad(func);
     const tipo = this.campoSelect(`Tipo de ${this.cfg.singular}`, "Seleccionar tipo");
@@ -3079,7 +3101,11 @@ var CrearFechadoModal = class extends GestorModal {
   }
   onOpen() {
     this.titleEl.setText(this.titulo);
-    const funcs = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+    const funcs = listFuncionalidadesVisibles(
+      this.app,
+      this.plugin.settings.carpetaAdmin,
+      this.plugin.settings.epicasOcultas
+    );
     const func = this.campoEpica(funcs);
     const fn = this.campoFuncionalidad(func);
     const nombre = this.campoTexto(this.labelNombre, this.placeholderNombre);
@@ -4157,7 +4183,7 @@ var KanbanView = class extends import_obsidian10.ItemView {
         });
       }
     };
-    for (const epica of listFuncionalidades(this.app, admin)) {
+    for (const epica of listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)) {
       const epicaPasa = !filtrar || await pasaSprints(epica);
       if (epicaPasa)
         agregar(epica, epica.nombre);
@@ -4513,7 +4539,7 @@ var GestorFuncionalidadesView = class extends import_obsidian11.ItemView {
   async recolectar() {
     var _a;
     const admin = this.plugin.settings.carpetaAdmin.trim();
-    this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+    this.epicas = admin ? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas) : [];
     this.historias = [];
     this.etiquetasEpica = [];
     this.colorEtiqueta = /* @__PURE__ */ new Map();
@@ -4879,7 +4905,7 @@ var RoadmapView = class extends import_obsidian12.ItemView {
       }
       filas.push({ ref, tipo, epicaSlug, etiqueta, porSprint });
     };
-    for (const epica of listFuncionalidades(this.app, admin)) {
+    for (const epica of listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)) {
       await agregar(epica, "epica", epica.slug, epica.nombre);
       for (const fn of listFuncionalidadesDe(this.app, epica.folder)) {
         await agregar(fn, "funcionalidad", epica.slug, `${epica.nombre} \u203A ${fn.nombre}`);
@@ -5233,7 +5259,7 @@ var TareasColaboradorView = class extends import_obsidian13.ItemView {
         }
       }
     };
-    for (const epica of listFuncionalidades(this.app, admin)) {
+    for (const epica of listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)) {
       const epicaPasa = !filtrar || await pasaSprints(epica);
       if (epicaPasa) {
         epicasRef.set(epica.nombre, epica);
@@ -5812,6 +5838,8 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     this.epicaSlug = "";
     this.epicas = [];
     this.docs = [];
+    /** Id del segmento que se está arrastrando para reordenar (null = arrastre de tarjeta). */
+    this.arrastreCarril = null;
     this.plugin = plugin;
   }
   getViewType() {
@@ -5833,6 +5861,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       this.registerEvent(this.app.vault.on("create", refrescar));
       this.registerEvent(this.app.vault.on("delete", refrescar));
       this.registerEvent(this.app.vault.on("rename", refrescar));
+      this.restaurarUltimaEpica();
       this.recargar();
     } catch (e) {
       console.error("gestion-de-epicas: error en onOpen (organizar documentos)", e);
@@ -5856,9 +5885,23 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     var _a;
     return (_a = this.epicas.find((e) => e.slug === this.epicaSlug)) != null ? _a : null;
   }
+  /** Recuerda la épica elegida para reabrirla la próxima vez que se abra la vista. */
+  guardarUltimaEpica() {
+    const mapa = this.plugin.settings.ultimaEpicaVista;
+    if (this.epicaSlug)
+      mapa[this.getViewType()] = this.epicaSlug;
+    else
+      delete mapa[this.getViewType()];
+    void this.plugin.saveSettings();
+  }
+  /** Restaura la última épica elegida (vacío la primera vez). */
+  restaurarUltimaEpica() {
+    var _a;
+    this.epicaSlug = (_a = this.plugin.settings.ultimaEpicaVista[this.getViewType()]) != null ? _a : "";
+  }
   recolectar() {
     const admin = this.plugin.settings.carpetaAdmin.trim();
-    this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+    this.epicas = admin ? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas) : [];
     this.docs = [];
     const ep = this.epicaActual();
     if (!ep)
@@ -5941,6 +5984,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     epicaSel.value = this.epicaSlug;
     epicaSel.addEventListener("change", () => {
       this.epicaSlug = epicaSel.value;
+      this.guardarUltimaEpica();
       this.recargar();
     });
     if (this.epicaActual()) {
@@ -5959,7 +6003,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
   renderBoard(cont) {
     const board = cont.createDiv({ cls: "gf-orgdocs-board" });
     const carriles = [
-      { id: CARRIL_DOCS_TODOS, nombre: "Todos los documentos", fijo: true },
+      { id: CARRIL_DOCS_TODOS, nombre: "Documentos sin segmentos", fijo: true },
       ...this.datos().carriles.map((c) => ({ ...c, fijo: false }))
     ];
     for (const carril of carriles)
@@ -5969,17 +6013,46 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     const colEl = board.createDiv({ cls: "gf-orgdocs-carril" });
     colEl.addEventListener("dragover", (e) => {
       e.preventDefault();
-      colEl.addClass("gf-drop");
+      if (this.arrastreCarril !== null) {
+        if (this.arrastreCarril !== carril.id)
+          colEl.addClass("gf-drop-carril");
+      } else {
+        colEl.addClass("gf-drop");
+      }
     });
-    colEl.addEventListener("dragleave", () => colEl.removeClass("gf-drop"));
+    colEl.addEventListener("dragleave", () => {
+      colEl.removeClass("gf-drop");
+      colEl.removeClass("gf-drop-carril");
+    });
     colEl.addEventListener("drop", (e) => {
       e.preventDefault();
       colEl.removeClass("gf-drop");
+      colEl.removeClass("gf-drop-carril");
+      if (this.arrastreCarril !== null) {
+        const rect = colEl.getBoundingClientRect();
+        const despues = e.clientY > rect.top + rect.height / 2;
+        this.reordenarCarril(this.arrastreCarril, carril.id, despues, carril.fijo);
+        return;
+      }
       const payload = leerPayload3(e);
       if (payload)
         this.soltar(payload.path, carril.id, null);
     });
     const header = colEl.createDiv({ cls: "gf-orgdocs-header" });
+    if (!carril.fijo) {
+      const grip = header.createDiv({ cls: "gf-orgdocs-grip" });
+      (0, import_obsidian14.setIcon)(grip, "grip-vertical");
+      grip.setAttr("aria-label", "Arrastrar para reordenar");
+      grip.draggable = true;
+      grip.addEventListener("dragstart", (e) => {
+        var _a;
+        this.arrastreCarril = carril.id;
+        (_a = e.dataTransfer) == null ? void 0 : _a.setData("text/plain", JSON.stringify({ carril: carril.id }));
+      });
+      grip.addEventListener("dragend", () => {
+        this.arrastreCarril = null;
+      });
+    }
     header.createEl("span", { cls: "gf-kanban-titulo", text: carril.nombre });
     const cards = this.ordenar(this.docs.filter((c) => this.carrilDe(c.file.path) === carril.id));
     header.createEl("span", { cls: "gf-kanban-conteo", text: String(cards.length) });
@@ -6016,12 +6089,16 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       );
     });
     el.addEventListener("dragover", (e) => {
+      if (this.arrastreCarril !== null)
+        return;
       e.preventDefault();
       e.stopPropagation();
       el.addClass("gf-drop-card");
     });
     el.addEventListener("dragleave", () => el.removeClass("gf-drop-card"));
     el.addEventListener("drop", (e) => {
+      if (this.arrastreCarril !== null)
+        return;
       e.preventDefault();
       e.stopPropagation();
       el.removeClass("gf-drop-card");
@@ -6075,6 +6152,34 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     this.render();
   }
   // ----- Carriles -----
+  /**
+   * Reordena un segmento personalizado, colocándolo antes o después del segmento
+   * destino según dónde se haya soltado. Soltar sobre el carril fijo "Documentos
+   * sin segmentos" lo coloca al principio de los personalizados.
+   */
+  reordenarCarril(origenId, destinoId, despues, destinoFijo) {
+    if (origenId === destinoId)
+      return;
+    const d = this.datosEditable();
+    const arr = d.carriles;
+    const desde = arr.findIndex((c) => c.id === origenId);
+    if (desde === -1)
+      return;
+    const [item] = arr.splice(desde, 1);
+    let hasta;
+    if (destinoFijo) {
+      hasta = 0;
+    } else {
+      hasta = arr.findIndex((c) => c.id === destinoId);
+      if (hasta === -1)
+        hasta = arr.length;
+      else if (despues)
+        hasta += 1;
+    }
+    arr.splice(hasta, 0, item);
+    void this.plugin.saveSettings();
+    this.render();
+  }
   agregarCarril() {
     new NombreCarrilModal(this.plugin, "Nuevo segmento", "", (nombre) => {
       const d = this.datosEditable();
@@ -6374,6 +6479,7 @@ var EtiquetarHistoriasView = class extends import_obsidian16.ItemView {
     this.registerEvent(this.app.vault.on("delete", refrescar));
     this.registerEvent(this.app.vault.on("rename", refrescar));
     this.registerEvent(this.app.metadataCache.on("changed", (file) => refrescar(file)));
+    this.restaurarUltimaEpica();
     this.recargar();
   }
   recargar() {
@@ -6392,10 +6498,24 @@ var EtiquetarHistoriasView = class extends import_obsidian16.ItemView {
     var _a;
     return (_a = this.epicas.find((e) => e.slug === this.epicaSlug)) != null ? _a : null;
   }
+  /** Recuerda la épica elegida para reabrirla la próxima vez que se abra la vista. */
+  guardarUltimaEpica() {
+    const mapa = this.plugin.settings.ultimaEpicaVista;
+    if (this.epicaSlug)
+      mapa[this.getViewType()] = this.epicaSlug;
+    else
+      delete mapa[this.getViewType()];
+    void this.plugin.saveSettings();
+  }
+  /** Restaura la última épica elegida (vacío la primera vez). */
+  restaurarUltimaEpica() {
+    var _a;
+    this.epicaSlug = (_a = this.plugin.settings.ultimaEpicaVista[this.getViewType()]) != null ? _a : "";
+  }
   recolectar() {
     var _a;
     const admin = this.plugin.settings.carpetaAdmin.trim();
-    this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+    this.epicas = admin ? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas) : [];
     this.historias = [];
     this.etiquetas = [];
     const ep = this.epicaActual();
@@ -6435,6 +6555,7 @@ var EtiquetarHistoriasView = class extends import_obsidian16.ItemView {
     epicaSel.value = this.epicaSlug;
     epicaSel.addEventListener("change", () => {
       this.epicaSlug = epicaSel.value;
+      this.guardarUltimaEpica();
       this.recargar();
     });
     if (this.epicaActual()) {
@@ -6674,7 +6795,7 @@ var ClasificarDocumentosView = class extends import_obsidian17.ItemView {
   }
   recolectar() {
     const admin = this.plugin.settings.carpetaAdmin.trim();
-    this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+    this.epicas = admin ? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas) : [];
     this.sinClasificar = [];
     const incTipos = this.plugin.settings.incidencias;
     const docTipos = this.plugin.settings.documentos;
@@ -6895,6 +7016,7 @@ var ReclasificarTipoView = class extends import_obsidian18.ItemView {
     this.registerEvent(this.app.vault.on("create", refrescar));
     this.registerEvent(this.app.vault.on("delete", refrescar));
     this.registerEvent(this.app.vault.on("rename", refrescar));
+    this.restaurarUltimaEpica();
     this.recargar();
   }
   recargar() {
@@ -6913,9 +7035,23 @@ var ReclasificarTipoView = class extends import_obsidian18.ItemView {
     var _a;
     return (_a = this.epicas.find((e) => e.slug === this.epicaSlug)) != null ? _a : null;
   }
+  /** Recuerda la épica elegida para reabrirla la próxima vez que se abra la vista. */
+  guardarUltimaEpica() {
+    const mapa = this.plugin.settings.ultimaEpicaVista;
+    if (this.epicaSlug)
+      mapa[this.getViewType()] = this.epicaSlug;
+    else
+      delete mapa[this.getViewType()];
+    void this.plugin.saveSettings();
+  }
+  /** Restaura la última épica elegida (vacío la primera vez). */
+  restaurarUltimaEpica() {
+    var _a;
+    this.epicaSlug = (_a = this.plugin.settings.ultimaEpicaVista[this.getViewType()]) != null ? _a : "";
+  }
   recolectar() {
     const admin = this.plugin.settings.carpetaAdmin.trim();
-    this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+    this.epicas = admin ? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas) : [];
     this.items = [];
     const ep = this.epicaActual();
     if (!ep) {
@@ -6962,6 +7098,7 @@ var ReclasificarTipoView = class extends import_obsidian18.ItemView {
     epicaSel.value = this.epicaSlug;
     epicaSel.addEventListener("change", () => {
       this.epicaSlug = epicaSel.value;
+      this.guardarUltimaEpica();
       this.asignacion.clear();
       this.recargar();
     });
@@ -7115,6 +7252,7 @@ var MoverIncidenciasView = class extends import_obsidian19.ItemView {
     this.registerEvent(this.app.vault.on("create", refrescar));
     this.registerEvent(this.app.vault.on("delete", refrescar));
     this.registerEvent(this.app.vault.on("rename", refrescar));
+    this.restaurarUltimaEpica();
     this.recargar();
   }
   recargar() {
@@ -7132,6 +7270,20 @@ var MoverIncidenciasView = class extends import_obsidian19.ItemView {
   epicaActual() {
     var _a;
     return (_a = this.epicas.find((e) => e.slug === this.epicaSlug)) != null ? _a : null;
+  }
+  /** Recuerda la épica elegida para reabrirla la próxima vez que se abra la vista. */
+  guardarUltimaEpica() {
+    const mapa = this.plugin.settings.ultimaEpicaVista;
+    if (this.epicaSlug)
+      mapa[this.getViewType()] = this.epicaSlug;
+    else
+      delete mapa[this.getViewType()];
+    void this.plugin.saveSettings();
+  }
+  /** Restaura la última épica elegida (vacío la primera vez). */
+  restaurarUltimaEpica() {
+    var _a;
+    this.epicaSlug = (_a = this.plugin.settings.ultimaEpicaVista[this.getViewType()]) != null ? _a : "";
   }
   recolectar() {
     const admin = this.plugin.settings.carpetaAdmin.trim();
@@ -7181,6 +7333,7 @@ var MoverIncidenciasView = class extends import_obsidian19.ItemView {
     epicaSel.value = this.epicaSlug;
     epicaSel.addEventListener("change", () => {
       this.epicaSlug = epicaSel.value;
+      this.guardarUltimaEpica();
       this.asignacion.clear();
       this.recargar();
     });
@@ -7494,7 +7647,75 @@ var MoverHistoriasView = class extends import_obsidian20.ItemView {
   }
 };
 
+// src/mostrar-ocultar-epicas.ts
+var import_obsidian21 = require("obsidian");
+var MostrarOcultarEpicasModal = class extends import_obsidian21.Modal {
+  constructor(plugin) {
+    super(plugin.app);
+    this.plugin = plugin;
+  }
+  onOpen() {
+    this.titleEl.setText("Mostrar/Ocultar \xE9picas");
+    this.modalEl.addClass("gf-modal-etiquetas");
+    this.render();
+  }
+  /** Slug de cada épica oculta (el orden no importa). */
+  get ocultas() {
+    return new Set(this.plugin.settings.epicasOcultas);
+  }
+  render() {
+    this.contentEl.empty();
+    this.contentEl.createEl("p", {
+      cls: "gf-campo-aviso",
+      text: "Las \xE9picas sin marcar se ocultan de los tableros y de los selects al crear documentos e incidencias. Se siguen viendo al mover y al gestionar \xE9picas."
+    });
+    const epicas = listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+    const scroll = this.contentEl.createDiv({ cls: "gf-etq-scroll" });
+    if (epicas.length === 0) {
+      scroll.createEl("em", { cls: "gf-campo-aviso", text: "No hay \xE9picas." });
+      return;
+    }
+    const tbody = scroll.createEl("table", { cls: "gf-etq-tabla" }).createEl("tbody");
+    for (const ep of epicas)
+      this.renderFila(tbody, ep);
+  }
+  renderFila(tbody, ep) {
+    const tr = tbody.createEl("tr", { cls: "gf-etq-fila" });
+    const tdNombre = tr.createEl("td", { cls: "gf-etq-nombre-td" });
+    tdNombre.createEl("span", { cls: "gf-etq-nombre", text: ep.nombre });
+    const tdVis = tr.createEl("td", { cls: "gf-etq-visible-td" });
+    const chk = tdVis.createEl("input", { type: "checkbox" });
+    chk.checked = !this.ocultas.has(ep.slug);
+    chk.setAttr("title", "Visible en tableros y selects de creaci\xF3n");
+    chk.addEventListener("change", () => void this.cambiar(ep.slug, chk.checked));
+  }
+  /** Marca la épica como visible u oculta y refresca los tableros abiertos. */
+  async cambiar(slug, visible) {
+    const set = this.ocultas;
+    if (visible)
+      set.delete(slug);
+    else
+      set.add(slug);
+    this.plugin.settings.epicasOcultas = [...set];
+    await this.plugin.saveSettings();
+    this.plugin.refrescarTablerosEpicas();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
 // src/main.ts
+function sanearUltimaEpicaVista(valor) {
+  const out = {};
+  if (!valor || typeof valor !== "object")
+    return out;
+  for (const [tipo, slug] of Object.entries(valor)) {
+    if (typeof slug === "string" && slug)
+      out[tipo] = slug;
+  }
+  return out;
+}
 function sanearOrganizacionDocs(valor) {
   const out = {};
   if (!valor || typeof valor !== "object")
@@ -7523,7 +7744,7 @@ function sanearOrganizacionDocs(valor) {
   }
   return out;
 }
-var GestorFuncionesPlugin = class extends import_obsidian21.Plugin {
+var GestorFuncionesPlugin = class extends import_obsidian22.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -7533,7 +7754,7 @@ var GestorFuncionesPlugin = class extends import_obsidian21.Plugin {
   async onload() {
     await this.loadSettings();
     this.app.workspace.onLayoutReady(() => void migrarCarpetasHistorias(this.app));
-    (0, import_obsidian21.addIcon)(ICONO_PLUGIN, ICONO_PLUGIN_SVG);
+    (0, import_obsidian22.addIcon)(ICONO_PLUGIN, ICONO_PLUGIN_SVG);
     this.addSettingTab(new GestorSettingTab(this.app, this));
     registerDashboard(this);
     this.registerView(VIEW_TYPE_ACCIONES, (leaf) => new AccionesView(leaf, this));
@@ -7885,6 +8106,41 @@ var GestorFuncionesPlugin = class extends import_obsidian21.Plugin {
   async abrirMoverHistorias() {
     await this.abrirVistaEnPestana(VIEW_TYPE_MOVER_HISTORIAS);
   }
+  abrirMostrarOcultarEpicas() {
+    if (!carpetasGestionListas(this.app)) {
+      new AvisoConfiguracionModal(this).open();
+      return;
+    }
+    new MostrarOcultarEpicasModal(this).open();
+  }
+  /**
+   * Refresca los tableros y vistas que respetan las épicas ocultas, para que el
+   * cambio de visibilidad se vea sin recargar manualmente. Los flujos de mover
+   * y de gestión de épicas no se incluyen (siguen mostrándolas todas).
+   */
+  refrescarTablerosEpicas() {
+    const tipos = [
+      VIEW_TYPE_ROADMAP,
+      VIEW_TYPE_GESTOR_FN,
+      VIEW_TYPE_KANBAN,
+      VIEW_TYPE_COLABORADORES,
+      VIEW_TYPE_DOCUMENTOS,
+      VIEW_TYPE_CLASIFICAR_DOCS,
+      VIEW_TYPE_RECLASIFICAR_DOCS,
+      VIEW_TYPE_RECLASIFICAR_INC,
+      VIEW_TYPE_ORGANIZAR_DOCS,
+      VIEW_TYPE_ETIQUETAR_HISTORIAS
+    ];
+    for (const tipo of tipos) {
+      for (const hoja of this.app.workspace.getLeavesOfType(tipo)) {
+        const vista = hoja.view;
+        if (typeof vista.recargar === "function")
+          void vista.recargar();
+        else if (typeof vista.render === "function")
+          void vista.render();
+      }
+    }
+  }
   /**
    * Abre la vista como pestaña del área principal. Si quedó anclada en un
    * panel lateral (layouts guardados de versiones anteriores), la desancla
@@ -7902,7 +8158,7 @@ var GestorFuncionesPlugin = class extends import_obsidian21.Plugin {
     await this.app.workspace.revealLeaf(hoja);
   }
   async loadSettings() {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
     const guardado = await this.loadData();
     const primeraVez = guardado === null || guardado === void 0;
     const data = guardado != null ? guardado : {};
@@ -7973,14 +8229,16 @@ var GestorFuncionesPlugin = class extends import_obsidian21.Plugin {
       ordenIncidenciasColab: ((_g = data.ordenIncidenciasColab) != null ? _g : []).map(String),
       ordenGruposDocumentos: ((_h = data.ordenGruposDocumentos) != null ? _h : []).map(String),
       organizacionDocs: sanearOrganizacionDocs(data.organizacionDocs),
+      epicasOcultas: ((_i = data.epicasOcultas) != null ? _i : []).map(String),
+      ultimaEpicaVista: sanearUltimaEpicaVista(data.ultimaEpicaVista),
       sprintActual: {
-        anio: anioValido((_i = data.sprintActual) == null ? void 0 : _i.anio),
-        sprint: enRango((_j = data.sprintActual) == null ? void 0 : _j.sprint, 1)
+        anio: anioValido((_j = data.sprintActual) == null ? void 0 : _j.anio),
+        sprint: enRango((_k = data.sprintActual) == null ? void 0 : _k.sprint, 1)
       },
       kanban: {
-        tareas: { ...(_l = (_k = data.kanban) == null ? void 0 : _k.tareas) != null ? _l : {} },
-        pendientes: { ...(_n = (_m = data.kanban) == null ? void 0 : _m.pendientes) != null ? _n : {} },
-        ordenIncidencias: ((_p = (_o = data.kanban) == null ? void 0 : _o.ordenIncidencias) != null ? _p : []).map(String),
+        tareas: { ...(_m = (_l = data.kanban) == null ? void 0 : _l.tareas) != null ? _m : {} },
+        pendientes: { ...(_o = (_n = data.kanban) == null ? void 0 : _n.pendientes) != null ? _o : {} },
+        ordenIncidencias: ((_q = (_p = data.kanban) == null ? void 0 : _p.ordenIncidencias) != null ? _q : []).map(String),
         filtroSprints: {
           desde: enRango(filtro == null ? void 0 : filtro.desde, 1),
           hasta: enRango(filtro == null ? void 0 : filtro.hasta, numSprints)

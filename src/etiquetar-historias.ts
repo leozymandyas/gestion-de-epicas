@@ -16,8 +16,8 @@ import {
 	guardarEtiquetasHistoria,
 	leerEtiquetasEpica,
 	leerEtiquetasHistoria,
-	listFuncionalidades,
 	listFuncionalidadesDe,
+	listFuncionalidadesVisibles,
 	renombrarEtiquetaHistoria,
 } from "./files";
 import { Etiqueta } from "./settings";
@@ -79,6 +79,7 @@ export class EtiquetarHistoriasView extends ItemView {
 		this.registerEvent(this.app.vault.on("delete", refrescar));
 		this.registerEvent(this.app.vault.on("rename", refrescar));
 		this.registerEvent(this.app.metadataCache.on("changed", (file) => refrescar(file)));
+		this.restaurarUltimaEpica();
 		this.recargar();
 	}
 
@@ -99,9 +100,24 @@ export class EtiquetarHistoriasView extends ItemView {
 		return this.epicas.find((e) => e.slug === this.epicaSlug) ?? null;
 	}
 
+	/** Recuerda la épica elegida para reabrirla la próxima vez que se abra la vista. */
+	private guardarUltimaEpica(): void {
+		const mapa = this.plugin.settings.ultimaEpicaVista;
+		if (this.epicaSlug) mapa[this.getViewType()] = this.epicaSlug;
+		else delete mapa[this.getViewType()];
+		void this.plugin.saveSettings();
+	}
+
+	/** Restaura la última épica elegida (vacío la primera vez). */
+	private restaurarUltimaEpica(): void {
+		this.epicaSlug = this.plugin.settings.ultimaEpicaVista[this.getViewType()] ?? "";
+	}
+
 	private recolectar(): void {
 		const admin = this.plugin.settings.carpetaAdmin.trim();
-		this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+		this.epicas = admin
+			? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)
+			: [];
 		this.historias = [];
 		this.etiquetas = [];
 		const ep = this.epicaActual();
@@ -143,6 +159,7 @@ export class EtiquetarHistoriasView extends ItemView {
 		epicaSel.value = this.epicaSlug;
 		epicaSel.addEventListener("change", () => {
 			this.epicaSlug = epicaSel.value;
+			this.guardarUltimaEpica();
 			this.recargar();
 		});
 

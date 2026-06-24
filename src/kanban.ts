@@ -5,8 +5,8 @@ import {
 	carpetasGestionListas,
 	getAsignados,
 	leerSprints,
-	listFuncionalidades,
 	listFuncionalidadesDe,
+	listFuncionalidadesVisibles,
 	listIncidencias,
 } from "./files";
 import { normalizarEstado, type Carril } from "./settings";
@@ -119,7 +119,7 @@ export class KanbanView extends ItemView {
 			}
 		};
 
-		for (const epica of listFuncionalidades(this.app, admin)) {
+		for (const epica of listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)) {
 			const epicaPasa = !filtrar || (await pasaSprints(epica));
 			if (epicaPasa) agregar(epica, epica.nombre);
 			for (const fn of listFuncionalidadesDe(this.app, epica.folder)) {

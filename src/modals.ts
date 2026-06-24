@@ -668,7 +668,11 @@ export class CrearTareaModal extends GestorModal {
 
 	onOpen(): void {
 		this.titleEl.setText("Crear tarea");
-		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+		const funcs = files.listFuncionalidadesVisibles(
+			this.app,
+			this.plugin.settings.carpetaAdmin,
+			this.plugin.settings.epicasOcultas
+		);
 		const func = this.campoEpica(funcs);
 		const fn = this.campoFuncionalidad(func);
 		const nombre = this.campoTexto("Nombre de la tarea", "Escribe nombre de la tarea");
@@ -760,7 +764,11 @@ export class CrearIncidenciaModal extends GestorModal {
 
 	onOpen(): void {
 		this.titleEl.setText(this.cfg.titulo);
-		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+		const funcs = files.listFuncionalidadesVisibles(
+			this.app,
+			this.plugin.settings.carpetaAdmin,
+			this.plugin.settings.epicasOcultas
+		);
 		const func = this.campoEpica(funcs);
 		const fn = this.cfg.soloEpica ? null : this.campoFuncionalidad(func);
 
@@ -878,7 +886,11 @@ abstract class CrearFechadoModal extends GestorModal {
 
 	onOpen(): void {
 		this.titleEl.setText(this.titulo);
-		const funcs = files.listFuncionalidades(this.app, this.plugin.settings.carpetaAdmin);
+		const funcs = files.listFuncionalidadesVisibles(
+			this.app,
+			this.plugin.settings.carpetaAdmin,
+			this.plugin.settings.epicasOcultas
+		);
 		const func = this.campoEpica(funcs);
 		const fn = this.campoFuncionalidad(func);
 		const nombre = this.campoTexto(this.labelNombre, this.placeholderNombre);

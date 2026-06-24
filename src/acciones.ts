@@ -27,6 +27,7 @@ const REGISTRO: Accion[] = [
 	{ id: "asignar-etiquetas", icono: "tag", texto: "Etiquetas de historias", accion: (p) => void p.abrirEtiquetarHistorias() },
 	{ id: "mover-historia", icono: "folder-tree", texto: "Historias por épica", accion: (p) => void p.abrirHistorias() },
 	{ id: "mover-historias-tablero", icono: "folder-symlink", texto: "Mover historias", accion: (p) => void p.abrirMoverHistorias() },
+	{ id: "mostrar-ocultar-epicas", icono: "eye", texto: "Mostrar/Ocultar épicas", accion: (p) => p.abrirMostrarOcultarEpicas() },
 	{ id: "archivar-epica", icono: "archive", texto: "Archivar épicas", accion: (p) => p.abrirModal("mover") },
 	{ id: "eliminar-epica-historia", icono: "trash-2", texto: "Eliminar épica o historia", accion: (p) => p.abrirModal("eliminarEpicaHistoria") },
 	// Épicas — tableros
@@ -60,7 +61,7 @@ const SECCIONES_PANEL: Array<{ id: string; titulo: string; acciones: string[] }>
 	{ id: "epicas-sprints", titulo: "Sprints y roadmap", acciones: ["asignar-sprint", "roadmap", "gestor-funcionalidades"] },
 	{ id: "epicas-historias", titulo: "Historias", acciones: ["mover-historia", "mover-historias-tablero", "asignar-etiquetas"] },
 	{ id: "epicas-colaboradores", titulo: "Colaboradores", acciones: ["colaboradores", "asignar-colaborador"] },
-	{ id: "epicas-acciones", titulo: "Acciones", acciones: ["archivar-epica", "eliminar-epica-historia"] },
+	{ id: "epicas-acciones", titulo: "Acciones", acciones: ["mostrar-ocultar-epicas", "archivar-epica", "eliminar-epica-historia"] },
 	// Pestaña Incidencias.
 	{ id: "inc-crear", titulo: "Crear", acciones: ["crear-incidencia"] },
 	{ id: "inc-tableros", titulo: "Tableros", acciones: ["incidencias-por-colaborador", "mover-incidencias", "reclasificar-incidencias"] },

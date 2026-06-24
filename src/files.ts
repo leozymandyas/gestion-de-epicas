@@ -301,6 +301,22 @@ export function listFuncionalidades(app: App, adminPath: string): FuncRef[] {
 }
 
 /**
+ * Como {@link listFuncionalidades}, pero omite las épicas marcadas como ocultas
+ * (por slug). Lo usan los tableros y los selects de creación; la gestión de
+ * épicas (mover, eliminar, renombrar) y los flujos de mover siguen viéndolas
+ * todas con {@link listFuncionalidades}.
+ */
+export function listFuncionalidadesVisibles(
+	app: App,
+	adminPath: string,
+	ocultas: Iterable<string>
+): FuncRef[] {
+	const set = ocultas instanceof Set ? ocultas : new Set(ocultas);
+	if (set.size === 0) return listFuncionalidades(app, adminPath);
+	return listFuncionalidades(app, adminPath).filter((f) => !set.has(f.slug));
+}
+
+/**
  * Funcionalidades de una épica: carpetas dentro de <épica>/funcionalidades/.
  * Comparten la forma de FuncRef, así que las operaciones de incidencias
  * funcionan igual a nivel de funcionalidad.

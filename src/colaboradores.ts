@@ -7,8 +7,8 @@ import {
 	getAsignados,
 	leerSprints,
 	listDocumentos,
-	listFuncionalidades,
 	listFuncionalidadesDe,
+	listFuncionalidadesVisibles,
 	listIncidencias,
 	moverIncidencia,
 } from "./files";
@@ -257,7 +257,7 @@ export class TareasColaboradorView extends ItemView {
 			}
 		};
 
-		for (const epica of listFuncionalidades(this.app, admin)) {
+		for (const epica of listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)) {
 			const epicaPasa = !filtrar || (await pasaSprints(epica));
 			if (epicaPasa) {
 				epicasRef.set(epica.nombre, epica);

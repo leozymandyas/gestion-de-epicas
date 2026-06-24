@@ -5,8 +5,8 @@ import {
 	FuncRef,
 	getAsignados,
 	leerSprints,
-	listFuncionalidades,
 	listFuncionalidadesDe,
+	listFuncionalidadesVisibles,
 } from "./files";
 import { renderChipEtiqueta } from "./colores";
 import { AsignarSprintModal, crearSelectorEtiquetas } from "./modals";
@@ -87,7 +87,7 @@ export class RoadmapView extends ItemView {
 			filas.push({ ref, tipo, epicaSlug, etiqueta, porSprint });
 		};
 
-		for (const epica of listFuncionalidades(this.app, admin)) {
+		for (const epica of listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)) {
 			await agregar(epica, "epica", epica.slug, epica.nombre);
 			for (const fn of listFuncionalidadesDe(this.app, epica.folder)) {
 				await agregar(fn, "funcionalidad", epica.slug, `${epica.nombre} › ${fn.nombre}`);

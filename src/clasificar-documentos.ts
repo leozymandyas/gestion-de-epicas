@@ -5,7 +5,7 @@ import {
 	FuncRef,
 	carpetasGestionListas,
 	clasificarComoDocumento,
-	listFuncionalidades,
+	listFuncionalidadesVisibles,
 	listSinClasificar,
 } from "./files";
 import { ETIQUETA_COLORES, renderChipEtiqueta } from "./colores";
@@ -78,7 +78,9 @@ export class ClasificarDocumentosView extends ItemView {
 
 	private recolectar(): void {
 		const admin = this.plugin.settings.carpetaAdmin.trim();
-		this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+		this.epicas = admin
+			? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)
+			: [];
 		this.sinClasificar = [];
 		const incTipos = this.plugin.settings.incidencias;
 		const docTipos = this.plugin.settings.documentos;

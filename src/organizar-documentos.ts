@@ -12,8 +12,8 @@ import {
 	FuncRef,
 	carpetasGestionListas,
 	listDocumentos,
-	listFuncionalidades,
 	listFuncionalidadesDe,
+	listFuncionalidadesVisibles,
 } from "./files";
 import { CARRIL_DOCS_TODOS, DocCarril, OrganizacionDocsEpica } from "./settings";
 import { renderChipEtiqueta } from "./colores";
@@ -35,7 +35,7 @@ interface DragPayload {
 /**
  * Tablero "Organizar documentos": tras elegir una épica, sus documentos (los de
  * la épica y los de sus historias) se muestran como tarjetas dentro de carriles
- * horizontales. El carril "Todos los documentos" recoge las no asignadas; el
+ * horizontales. El carril "Documentos sin segmentos" recoge las no asignadas; el
  * usuario puede crear carriles, ponerles nombre y arrastrar documentos entre
  * ellos. La organización (carriles, asignación y orden) se guarda por épica en
  * data.json (carpeta oculta del vault), igual que el resto de los órdenes de los
@@ -47,6 +47,8 @@ export class OrganizarDocumentosView extends ItemView {
 	private epicaSlug = "";
 	private epicas: FuncRef[] = [];
 	private docs: DocCard[] = [];
+	/** Id del segmento que se está arrastrando para reordenar (null = arrastre de tarjeta). */
+	private arrastreCarril: string | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: GestorFuncionesPlugin) {
 		super(leaf);
@@ -74,6 +76,7 @@ export class OrganizarDocumentosView extends ItemView {
 			this.registerEvent(this.app.vault.on("create", refrescar));
 			this.registerEvent(this.app.vault.on("delete", refrescar));
 			this.registerEvent(this.app.vault.on("rename", refrescar));
+			this.restaurarUltimaEpica();
 			this.recargar();
 		} catch (e) {
 			console.error("gestion-de-epicas: error en onOpen (organizar documentos)", e);
@@ -99,9 +102,24 @@ export class OrganizarDocumentosView extends ItemView {
 		return this.epicas.find((e) => e.slug === this.epicaSlug) ?? null;
 	}
 
+	/** Recuerda la épica elegida para reabrirla la próxima vez que se abra la vista. */
+	private guardarUltimaEpica(): void {
+		const mapa = this.plugin.settings.ultimaEpicaVista;
+		if (this.epicaSlug) mapa[this.getViewType()] = this.epicaSlug;
+		else delete mapa[this.getViewType()];
+		void this.plugin.saveSettings();
+	}
+
+	/** Restaura la última épica elegida (vacío la primera vez). */
+	private restaurarUltimaEpica(): void {
+		this.epicaSlug = this.plugin.settings.ultimaEpicaVista[this.getViewType()] ?? "";
+	}
+
 	private recolectar(): void {
 		const admin = this.plugin.settings.carpetaAdmin.trim();
-		this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+		this.epicas = admin
+			? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)
+			: [];
 		this.docs = [];
 		const ep = this.epicaActual();
 		if (!ep) return;
@@ -192,6 +210,7 @@ export class OrganizarDocumentosView extends ItemView {
 		epicaSel.value = this.epicaSlug;
 		epicaSel.addEventListener("change", () => {
 			this.epicaSlug = epicaSel.value;
+			this.guardarUltimaEpica();
 			this.recargar();
 		});
 
@@ -215,7 +234,7 @@ export class OrganizarDocumentosView extends ItemView {
 	private renderBoard(cont: HTMLElement): void {
 		const board = cont.createDiv({ cls: "gf-orgdocs-board" });
 		const carriles: Array<DocCarril & { fijo: boolean }> = [
-			{ id: CARRIL_DOCS_TODOS, nombre: "Todos los documentos", fijo: true },
+			{ id: CARRIL_DOCS_TODOS, nombre: "Documentos sin segmentos", fijo: true },
 			...this.datos().carriles.map((c) => ({ ...c, fijo: false })),
 		];
 		for (const carril of carriles) this.renderCarril(board, carril);
@@ -225,17 +244,46 @@ export class OrganizarDocumentosView extends ItemView {
 		const colEl = board.createDiv({ cls: "gf-orgdocs-carril" });
 		colEl.addEventListener("dragover", (e) => {
 			e.preventDefault();
-			colEl.addClass("gf-drop");
+			if (this.arrastreCarril !== null) {
+				if (this.arrastreCarril !== carril.id) colEl.addClass("gf-drop-carril");
+			} else {
+				colEl.addClass("gf-drop");
+			}
 		});
-		colEl.addEventListener("dragleave", () => colEl.removeClass("gf-drop"));
+		colEl.addEventListener("dragleave", () => {
+			colEl.removeClass("gf-drop");
+			colEl.removeClass("gf-drop-carril");
+		});
 		colEl.addEventListener("drop", (e) => {
 			e.preventDefault();
 			colEl.removeClass("gf-drop");
+			colEl.removeClass("gf-drop-carril");
+			// Arrastre de segmento: reordenar; arrastre de tarjeta: mover el documento.
+			if (this.arrastreCarril !== null) {
+				const rect = colEl.getBoundingClientRect();
+				const despues = e.clientY > rect.top + rect.height / 2;
+				this.reordenarCarril(this.arrastreCarril, carril.id, despues, carril.fijo);
+				return;
+			}
 			const payload = leerPayload(e);
 			if (payload) this.soltar(payload.path, carril.id, null);
 		});
 
 		const header = colEl.createDiv({ cls: "gf-orgdocs-header" });
+		// Los segmentos personalizados se reordenan arrastrándolos por el asa.
+		if (!carril.fijo) {
+			const grip = header.createDiv({ cls: "gf-orgdocs-grip" });
+			setIcon(grip, "grip-vertical");
+			grip.setAttr("aria-label", "Arrastrar para reordenar");
+			grip.draggable = true;
+			grip.addEventListener("dragstart", (e) => {
+				this.arrastreCarril = carril.id;
+				e.dataTransfer?.setData("text/plain", JSON.stringify({ carril: carril.id }));
+			});
+			grip.addEventListener("dragend", () => {
+				this.arrastreCarril = null;
+			});
+		}
 		header.createEl("span", { cls: "gf-kanban-titulo", text: carril.nombre });
 		const cards = this.ordenar(this.docs.filter((c) => this.carrilDe(c.file.path) === carril.id));
 		header.createEl("span", { cls: "gf-kanban-conteo", text: String(cards.length) });
@@ -275,12 +323,15 @@ export class OrganizarDocumentosView extends ItemView {
 		});
 		// Soltar sobre esta tarjeta: insertar la arrastrada justo antes de ella.
 		el.addEventListener("dragover", (e) => {
+			// Si se arrastra un segmento, no interferir: deja que lo maneje el carril.
+			if (this.arrastreCarril !== null) return;
 			e.preventDefault();
 			e.stopPropagation();
 			el.addClass("gf-drop-card");
 		});
 		el.addEventListener("dragleave", () => el.removeClass("gf-drop-card"));
 		el.addEventListener("drop", (e) => {
+			if (this.arrastreCarril !== null) return;
 			e.preventDefault();
 			e.stopPropagation();
 			el.removeClass("gf-drop-card");
@@ -335,6 +386,31 @@ export class OrganizarDocumentosView extends ItemView {
 
 	// ----- Carriles -----
 
+	/**
+	 * Reordena un segmento personalizado, colocándolo antes o después del segmento
+	 * destino según dónde se haya soltado. Soltar sobre el carril fijo "Documentos
+	 * sin segmentos" lo coloca al principio de los personalizados.
+	 */
+	private reordenarCarril(origenId: string, destinoId: string, despues: boolean, destinoFijo: boolean): void {
+		if (origenId === destinoId) return;
+		const d = this.datosEditable();
+		const arr = d.carriles;
+		const desde = arr.findIndex((c) => c.id === origenId);
+		if (desde === -1) return;
+		const [item] = arr.splice(desde, 1);
+		let hasta: number;
+		if (destinoFijo) {
+			hasta = 0;
+		} else {
+			hasta = arr.findIndex((c) => c.id === destinoId);
+			if (hasta === -1) hasta = arr.length;
+			else if (despues) hasta += 1;
+		}
+		arr.splice(hasta, 0, item);
+		void this.plugin.saveSettings();
+		this.render();
+	}
+
 	private agregarCarril(): void {
 		new NombreCarrilModal(this.plugin, "Nuevo segmento", "", (nombre) => {
 			const d = this.datosEditable();
@@ -357,7 +433,7 @@ export class OrganizarDocumentosView extends ItemView {
 	private eliminarCarril(carril: DocCarril): void {
 		const d = this.datosEditable();
 		d.carriles = d.carriles.filter((c) => c.id !== carril.id);
-		// Los documentos del carril eliminado vuelven a "Todos los documentos".
+		// Los documentos del carril eliminado vuelven a "Documentos sin segmentos".
 		for (const [path, lane] of Object.entries(d.asignacion)) {
 			if (lane === carril.id) delete d.asignacion[path];
 		}

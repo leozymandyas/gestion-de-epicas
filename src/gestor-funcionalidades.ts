@@ -9,8 +9,8 @@ import {
 	leerEtiquetasHistoria,
 	leerSprintHistoria,
 	leerSprints,
-	listFuncionalidades,
 	listFuncionalidadesDe,
+	listFuncionalidadesVisibles,
 } from "./files";
 import { Etiqueta, normalizarEstado } from "./settings";
 import { colorDesdeNombre, renderChipEtiqueta } from "./colores";
@@ -123,7 +123,9 @@ export class GestorFuncionalidadesView extends ItemView {
 
 	private async recolectar(): Promise<void> {
 		const admin = this.plugin.settings.carpetaAdmin.trim();
-		this.epicas = admin ? listFuncionalidades(this.app, admin) : [];
+		this.epicas = admin
+			? listFuncionalidadesVisibles(this.app, admin, this.plugin.settings.epicasOcultas)
+			: [];
 		this.historias = [];
 		this.etiquetasEpica = [];
 		this.colorEtiqueta = new Map();

@@ -46,11 +46,11 @@ export interface DocCarril {
 
 /**
  * Organización de documentos de una épica en el tablero "Organizar documentos".
- * El carril "Todos los documentos" (id "todos") es implícito y recoge cualquier
+ * El carril "Documentos sin segmentos" (id "todos") es implícito y recoge cualquier
  * documento que no esté asignado a un carril personalizado.
  */
 export interface OrganizacionDocsEpica {
-	/** Carriles personalizados (además del implícito "Todos los documentos"). */
+	/** Carriles personalizados (además del implícito "Documentos sin segmentos"). */
 	carriles: DocCarril[];
 	/** Ruta del documento → id del carril donde está su tarjeta. */
 	asignacion: Record<string, string>;
@@ -85,6 +85,10 @@ export interface GestorSettings {
 	ordenGruposDocumentos: string[];
 	/** Organización por carriles del tablero "Organizar documentos" (clave = slug de la épica). */
 	organizacionDocs: Record<string, OrganizacionDocsEpica>;
+	/** Slugs de épicas marcadas como ocultas (se omiten de tableros y selects de creación). */
+	epicasOcultas: string[];
+	/** Última épica elegida en cada vista con selector de épica (clave = viewType → slug). */
+	ultimaEpicaVista: Record<string, string>;
 	/** Sprint en curso elegido en el panel; sugiere filtros en roadmap/incidencias. */
 	sprintActual: { anio: number; sprint: number };
 	kanban: KanbanState;
@@ -143,6 +147,8 @@ export const DEFAULT_SETTINGS: GestorSettings = {
 	ordenIncidenciasColab: [],
 	ordenGruposDocumentos: [],
 	organizacionDocs: {},
+	epicasOcultas: [],
+	ultimaEpicaVista: {},
 	sprintActual: { anio: new Date().getFullYear(), sprint: 1 },
 	kanban: {
 		tareas: {},
@@ -167,6 +173,18 @@ export class GestorSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+
+		new Setting(containerEl)
+			.setName("Documentación")
+			.setDesc("Aprende a usar el plugin con la guía completa en la web.")
+			.addButton((btn) =>
+				btn
+					.setButtonText("Documentación")
+					.setCta()
+					.onClick(() => {
+						window.open("https://www.anatomia-del-producto.com/gestion-de-epicas/");
+					})
+			);
 
 		new Setting(containerEl).setName("Configuración del Sprint").setHeading();
 		this.renderSprintCard(containerEl);

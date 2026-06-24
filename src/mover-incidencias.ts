@@ -64,6 +64,7 @@ export class MoverIncidenciasView extends ItemView {
 		this.registerEvent(this.app.vault.on("create", refrescar));
 		this.registerEvent(this.app.vault.on("delete", refrescar));
 		this.registerEvent(this.app.vault.on("rename", refrescar));
+		this.restaurarUltimaEpica();
 		this.recargar();
 	}
 
@@ -82,6 +83,19 @@ export class MoverIncidenciasView extends ItemView {
 
 	private epicaActual(): FuncRef | null {
 		return this.epicas.find((e) => e.slug === this.epicaSlug) ?? null;
+	}
+
+	/** Recuerda la épica elegida para reabrirla la próxima vez que se abra la vista. */
+	private guardarUltimaEpica(): void {
+		const mapa = this.plugin.settings.ultimaEpicaVista;
+		if (this.epicaSlug) mapa[this.getViewType()] = this.epicaSlug;
+		else delete mapa[this.getViewType()];
+		void this.plugin.saveSettings();
+	}
+
+	/** Restaura la última épica elegida (vacío la primera vez). */
+	private restaurarUltimaEpica(): void {
+		this.epicaSlug = this.plugin.settings.ultimaEpicaVista[this.getViewType()] ?? "";
 	}
 
 	private recolectar(): void {
@@ -132,6 +146,7 @@ export class MoverIncidenciasView extends ItemView {
 		epicaSel.value = this.epicaSlug;
 		epicaSel.addEventListener("change", () => {
 			this.epicaSlug = epicaSel.value;
+			this.guardarUltimaEpica();
 			this.asignacion.clear();
 			this.recargar();
 		});

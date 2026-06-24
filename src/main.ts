@@ -61,6 +61,7 @@ import {
 	MoverEpicaModal,
 } from "./modals";
 import { GestorEtiquetasModal } from "./etiquetas-modal";
+import { MostrarOcultarEpicasModal } from "./mostrar-ocultar-epicas";
 import { registrarBotonFlotante } from "./menu-contextual";
 
 export type TipoModal =
@@ -77,6 +78,16 @@ export type TipoModal =
 	| "configDocumentos"
 	| "documento"
 	| "eliminarEpicaHistoria";
+
+/** Sanea el mapa de última épica elegida por vista (viewType → slug). */
+function sanearUltimaEpicaVista(valor: unknown): Record<string, string> {
+	const out: Record<string, string> = {};
+	if (!valor || typeof valor !== "object") return out;
+	for (const [tipo, slug] of Object.entries(valor as Record<string, unknown>)) {
+		if (typeof slug === "string" && slug) out[tipo] = slug;
+	}
+	return out;
+}
 
 /** Sanea el mapa de organización por carriles de "Organizar documentos". */
 function sanearOrganizacionDocs(valor: unknown): Record<string, OrganizacionDocsEpica> {
@@ -500,6 +511,41 @@ export default class GestorFuncionesPlugin extends Plugin {
 		await this.abrirVistaEnPestana(VIEW_TYPE_MOVER_HISTORIAS);
 	}
 
+	abrirMostrarOcultarEpicas(): void {
+		if (!carpetasGestionListas(this.app)) {
+			new AvisoConfiguracionModal(this).open();
+			return;
+		}
+		new MostrarOcultarEpicasModal(this).open();
+	}
+
+	/**
+	 * Refresca los tableros y vistas que respetan las épicas ocultas, para que el
+	 * cambio de visibilidad se vea sin recargar manualmente. Los flujos de mover
+	 * y de gestión de épicas no se incluyen (siguen mostrándolas todas).
+	 */
+	refrescarTablerosEpicas(): void {
+		const tipos = [
+			VIEW_TYPE_ROADMAP,
+			VIEW_TYPE_GESTOR_FN,
+			VIEW_TYPE_KANBAN,
+			VIEW_TYPE_COLABORADORES,
+			VIEW_TYPE_DOCUMENTOS,
+			VIEW_TYPE_CLASIFICAR_DOCS,
+			VIEW_TYPE_RECLASIFICAR_DOCS,
+			VIEW_TYPE_RECLASIFICAR_INC,
+			VIEW_TYPE_ORGANIZAR_DOCS,
+			VIEW_TYPE_ETIQUETAR_HISTORIAS,
+		];
+		for (const tipo of tipos) {
+			for (const hoja of this.app.workspace.getLeavesOfType(tipo)) {
+				const vista = hoja.view as { recargar?: () => unknown; render?: () => unknown };
+				if (typeof vista.recargar === "function") void vista.recargar();
+				else if (typeof vista.render === "function") void vista.render();
+			}
+		}
+	}
+
 	/**
 	 * Abre la vista como pestaña del área principal. Si quedó anclada en un
 	 * panel lateral (layouts guardados de versiones anteriores), la desancla
@@ -612,6 +658,8 @@ export default class GestorFuncionesPlugin extends Plugin {
 			ordenIncidenciasColab: (data.ordenIncidenciasColab ?? []).map(String),
 			ordenGruposDocumentos: (data.ordenGruposDocumentos ?? []).map(String),
 			organizacionDocs: sanearOrganizacionDocs(data.organizacionDocs),
+			epicasOcultas: (data.epicasOcultas ?? []).map(String),
+			ultimaEpicaVista: sanearUltimaEpicaVista(data.ultimaEpicaVista),
 			sprintActual: {
 				anio: anioValido(data.sprintActual?.anio),
 				sprint: enRango(data.sprintActual?.sprint, 1),
