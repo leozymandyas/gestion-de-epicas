@@ -172,14 +172,18 @@ async function guardarEtiquetasEpica(app, epica, etiquetas) {
     }));
   });
 }
+var FM_ETIQUETA_HISTORIA = "etiqueta-historia";
+var FM_ETIQUETA_HISTORIA_LEGACY = "etiquetas";
 function leerEtiquetasHistoria(app, file) {
-  var _a;
+  var _a, _b;
   const fm = (_a = app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
-  return Array.isArray(fm == null ? void 0 : fm.etiquetas) ? fm.etiquetas.map(String) : [];
+  const valor = (_b = fm == null ? void 0 : fm[FM_ETIQUETA_HISTORIA]) != null ? _b : fm == null ? void 0 : fm[FM_ETIQUETA_HISTORIA_LEGACY];
+  return Array.isArray(valor) ? valor.map(String) : [];
 }
 async function guardarEtiquetasHistoria(app, file, nombres) {
   await app.fileManager.processFrontMatter(file, (fm) => {
-    fm.etiquetas = nombres;
+    fm[FM_ETIQUETA_HISTORIA] = nombres;
+    delete fm[FM_ETIQUETA_HISTORIA_LEGACY];
   });
 }
 function leerSprintHistoria(app, file) {
@@ -248,7 +252,7 @@ async function migrarCampoHistoria(app) {
   }
 }
 async function migrarCarpetasHistorias(app) {
-  var _a, _b;
+  var _a;
   const epicas = [
     ...listFuncionalidades(app, CARPETA_ACTIVAS),
     ...listFuncionalidades(app, CARPETA_INACTIVAS)
@@ -278,15 +282,22 @@ async function migrarCarpetasHistorias(app) {
   ];
   for (const ep of epicas2) {
     for (const h of listFuncionalidadesDe(app, ep.folder)) {
-      const tipo = (_b = (_a = app.metadataCache.getFileCache(h.file)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b.tipo;
-      if (tipo === "funcionalidad") {
-        try {
-          await app.fileManager.processFrontMatter(h.file, (fm) => {
-            fm.tipo = "historia";
-          });
-        } catch (e) {
-          console.error(e);
-        }
+      const fm = (_a = app.metadataCache.getFileCache(h.file)) == null ? void 0 : _a.frontmatter;
+      const tipoLegacy = (fm == null ? void 0 : fm.tipo) === "funcionalidad";
+      const etqLegacy = (fm == null ? void 0 : fm[FM_ETIQUETA_HISTORIA_LEGACY]) !== void 0 && (fm == null ? void 0 : fm[FM_ETIQUETA_HISTORIA]) === void 0;
+      if (!tipoLegacy && !etqLegacy)
+        continue;
+      try {
+        await app.fileManager.processFrontMatter(h.file, (f) => {
+          if (tipoLegacy)
+            f.tipo = "historia";
+          if (etqLegacy) {
+            f[FM_ETIQUETA_HISTORIA] = f[FM_ETIQUETA_HISTORIA_LEGACY];
+            delete f[FM_ETIQUETA_HISTORIA_LEGACY];
+          }
+        });
+      } catch (e) {
+        console.error(e);
       }
     }
   }
@@ -1789,6 +1800,11 @@ var GestorSettingTab = class extends import_obsidian4.PluginSettingTab {
         window.open("https://www.anatomia-del-producto.com/gestion-de-epicas/");
       })
     );
+    new import_obsidian4.Setting(containerEl).setName("Apoyar el desarrollo").setDesc("Si este plugin te resulta \xFAtil, puedes invitarme un caf\xE9.").addButton(
+      (btn) => btn.setButtonText("Buy Me a Coffee").setCta().onClick(() => {
+        window.open("https://buymeacoffee.com/leonardoruano");
+      })
+    );
     new import_obsidian4.Setting(containerEl).setName("Configuraci\xF3n del Sprint").setHeading();
     this.renderSprintCard(containerEl);
     this.renderTarjeta(
@@ -1821,11 +1837,6 @@ var GestorSettingTab = class extends import_obsidian4.PluginSettingTab {
           onClick: () => new ImportarConfigModal(this.plugin, () => this.display()).open()
         }
       ]
-    );
-    new import_obsidian4.Setting(containerEl).setName("Apoyar el desarrollo").setDesc("Si este plugin te resulta \xFAtil, puedes invitarme un caf\xE9.").addButton(
-      (btn) => btn.setButtonText("Buy Me a Coffee").setCta().onClick(() => {
-        window.open("https://buymeacoffee.com/leonardoruano");
-      })
     );
   }
   /** Tarjeta con título, descripción a la izquierda y botones a la derecha. */
@@ -5861,16 +5872,18 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       this.registerEvent(this.app.vault.on("create", refrescar));
       this.registerEvent(this.app.vault.on("delete", refrescar));
       this.registerEvent(this.app.vault.on("rename", refrescar));
+      this.registerEvent(this.app.metadataCache.on("changed", (file) => refrescar(file)));
       this.restaurarUltimaEpica();
-      this.recargar();
+      void this.recargar();
     } catch (e) {
       console.error("gestion-de-epicas: error en onOpen (organizar documentos)", e);
       this.render();
     }
   }
-  /** Relee desde disco y vuelve a renderizar. */
-  recargar() {
+  /** Relee desde disco, migra asignaciones heredadas y vuelve a renderizar. */
+  async recargar() {
     this.recolectar();
+    await this.migrarSegmentos();
     this.render();
   }
   renderSoon() {
@@ -5878,7 +5891,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       window.clearTimeout(this.renderTimer);
     this.renderTimer = window.setTimeout(() => {
       this.renderTimer = null;
-      this.recargar();
+      void this.recargar();
     }, 150);
   }
   epicaActual() {
@@ -5908,8 +5921,11 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       return;
     const tipos = this.plugin.settings.documentos;
     const agregar = (ref) => {
+      var _a;
       for (const doc of listDocumentos(this.app, ref, tipos)) {
-        this.docs.push({ file: doc.file, nombre: doc.nombre, tipoNombre: doc.tipoNombre });
+        const fm = (_a = this.app.metadataCache.getFileCache(doc.file)) == null ? void 0 : _a.frontmatter;
+        const segmento = (fm == null ? void 0 : fm.segmento) ? String(fm.segmento) : void 0;
+        this.docs.push({ file: doc.file, nombre: doc.nombre, tipoNombre: doc.tipoNombre, segmento });
       }
     };
     agregar(ep);
@@ -5936,12 +5952,15 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     }
     return d;
   }
-  /** Carril donde vive un documento; si su carril ya no existe, va al de "Todos". */
-  carrilDe(path) {
-    const d = this.datos();
-    const lane = d.asignacion[path];
-    if (lane && lane !== CARRIL_DOCS_TODOS && d.carriles.some((c) => c.id === lane))
-      return lane;
+  /** Carril donde se muestra un documento, según su frontmatter `segmento`. Si ese
+   * segmento ya no existe (se borró el carril), cae en "Documentos sin segmentos"
+   * aunque el documento conserve la propiedad. */
+  carrilDe(card) {
+    if (card.segmento) {
+      const c = this.datos().carriles.find((x) => x.nombre === card.segmento);
+      if (c)
+        return c.id;
+    }
     return CARRIL_DOCS_TODOS;
   }
   colorTipo(nombre) {
@@ -5985,7 +6004,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     epicaSel.addEventListener("change", () => {
       this.epicaSlug = epicaSel.value;
       this.guardarUltimaEpica();
-      this.recargar();
+      void this.recargar();
     });
     if (this.epicaActual()) {
       const agregar = barra.createEl("button", { text: "Agregar segmento", cls: "gf-roadmap-recargar" });
@@ -5993,7 +6012,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
     }
     const recargar = barra.createEl("button", { text: "Recargar", cls: "gf-roadmap-recargar" });
     recargar.setAttr("title", "Releer las notas desde el disco");
-    recargar.addEventListener("click", () => this.recargar());
+    recargar.addEventListener("click", () => void this.recargar());
     if (!this.epicaActual()) {
       cont.createDiv({ cls: "gf-kanban-vacio", text: "Selecciona una \xE9pica." });
       return;
@@ -6036,7 +6055,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       }
       const payload = leerPayload3(e);
       if (payload)
-        this.soltar(payload.path, carril.id, null);
+        void this.soltar(payload.path, carril.id, null);
     });
     const header = colEl.createDiv({ cls: "gf-orgdocs-header" });
     if (!carril.fijo) {
@@ -6054,7 +6073,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       });
     }
     header.createEl("span", { cls: "gf-kanban-titulo", text: carril.nombre });
-    const cards = this.ordenar(this.docs.filter((c) => this.carrilDe(c.file.path) === carril.id));
+    const cards = this.ordenar(this.docs.filter((c) => this.carrilDe(c) === carril.id));
     header.createEl("span", { cls: "gf-kanban-conteo", text: String(cards.length) });
     if (!carril.fijo) {
       const acciones = header.createDiv({ cls: "gf-orgdocs-carril-acciones" });
@@ -6104,7 +6123,7 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       el.removeClass("gf-drop-card");
       const payload = leerPayload3(e);
       if (payload && payload.path !== card.file.path) {
-        this.soltar(payload.path, carrilId, card.file.path);
+        void this.soltar(payload.path, carrilId, card.file.path);
       }
     });
     renderChipEtiqueta(el, card.tipoNombre, this.colorTipo(card.tipoNombre));
@@ -6138,18 +6157,54 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
       orden.splice(pos, 0, path);
     d.orden = orden;
   }
-  /** Asigna el carril del documento y/o lo reordena dentro de él. */
-  soltar(path, carrilId, beforeKey) {
-    if (!this.docs.some((c) => c.file.path === path))
+  /** Mueve el documento al segmento del carril (escribe `segmento` en su
+   * frontmatter) y lo reordena dentro de él. */
+  async soltar(path, carrilId, beforeKey) {
+    var _a, _b;
+    const card = this.docs.find((c) => c.file.path === path);
+    if (!card)
       return;
-    const d = this.datosEditable();
     this.posicionar(path, beforeKey);
-    if (carrilId === CARRIL_DOCS_TODOS)
-      delete d.asignacion[path];
-    else
-      d.asignacion[path] = carrilId;
-    void this.plugin.saveSettings();
+    const nombre = carrilId === CARRIL_DOCS_TODOS ? null : (_b = (_a = this.datos().carriles.find((c) => c.id === carrilId)) == null ? void 0 : _a.nombre) != null ? _b : null;
+    await this.escribirSegmento(card.file, nombre);
+    card.segmento = nombre != null ? nombre : void 0;
+    await this.plugin.saveSettings();
     this.render();
+  }
+  /** Escribe (o borra, con null) la propiedad `segmento` del documento. */
+  async escribirSegmento(file, nombre) {
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      if (nombre)
+        fm.segmento = nombre;
+      else
+        delete fm.segmento;
+    });
+  }
+  /** Migra las asignaciones heredadas (guardadas en settings) al frontmatter, una
+   * sola vez por documento; después limpia la asignación heredada. Conserva la
+   * compatibilidad con organizaciones creadas antes de mover el segmento al .md. */
+  async migrarSegmentos() {
+    var _a;
+    const d = this.plugin.settings.organizacionDocs[this.epicaSlug];
+    if (!d || Object.keys(d.asignacion).length === 0)
+      return;
+    let cambios = false;
+    for (const card of this.docs) {
+      const legacy = d.asignacion[card.file.path];
+      if (!legacy)
+        continue;
+      if (!card.segmento) {
+        const nombre = (_a = d.carriles.find((c) => c.id === legacy)) == null ? void 0 : _a.nombre;
+        if (nombre) {
+          await this.escribirSegmento(card.file, nombre);
+          card.segmento = nombre;
+        }
+      }
+      delete d.asignacion[card.file.path];
+      cambios = true;
+    }
+    if (cambios)
+      await this.plugin.saveSettings();
   }
   // ----- Carriles -----
   /**
@@ -6190,23 +6245,36 @@ var OrganizarDocumentosView = class extends import_obsidian14.ItemView {
   }
   renombrarCarril(carril) {
     new NombreCarrilModal(this.plugin, "Renombrar segmento", carril.nombre, (nombre) => {
-      const d = this.datosEditable();
-      const c = d.carriles.find((x) => x.id === carril.id);
-      if (c)
-        c.nombre = nombre;
-      void this.plugin.saveSettings();
-      this.render();
+      void (async () => {
+        const anterior = carril.nombre;
+        const d = this.datosEditable();
+        const c = d.carriles.find((x) => x.id === carril.id);
+        if (c)
+          c.nombre = nombre;
+        await this.plugin.saveSettings();
+        for (const card of this.docs) {
+          if (card.segmento === anterior) {
+            await this.escribirSegmento(card.file, nombre);
+            card.segmento = nombre;
+          }
+        }
+        this.render();
+      })();
     }).open();
   }
   eliminarCarril(carril) {
     const d = this.datosEditable();
     d.carriles = d.carriles.filter((c) => c.id !== carril.id);
-    for (const [path, lane] of Object.entries(d.asignacion)) {
-      if (lane === carril.id)
-        delete d.asignacion[path];
-    }
-    void this.plugin.saveSettings();
-    this.render();
+    void (async () => {
+      for (const card of this.docs) {
+        if (card.segmento === carril.nombre) {
+          await this.escribirSegmento(card.file, null);
+          card.segmento = void 0;
+        }
+      }
+      await this.plugin.saveSettings();
+      this.render();
+    })();
   }
 };
 function leerPayload3(e) {
@@ -6688,7 +6756,7 @@ var EtiquetarHistoriasView = class extends import_obsidian16.ItemView {
     new ConfirmacionModal(
       this.plugin,
       "Eliminar etiqueta",
-      `\xBFEliminar la etiqueta "${nombre}"? Se quitar\xE1 de la \xE9pica y de todas las historias que la tengan.`,
+      `\xBFEliminar la etiqueta "${nombre}"? Se quitar\xE1 de la \xE9pica y de las historias que la tengan.`,
       "Eliminar",
       async () => {
         const nuevas = this.etiquetas.filter((e) => e.nombre !== nombre);
@@ -7754,6 +7822,11 @@ var GestorFuncionesPlugin = class extends import_obsidian22.Plugin {
   async onload() {
     await this.loadSettings();
     this.app.workspace.onLayoutReady(() => void migrarCarpetasHistorias(this.app));
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) => {
+        void this.remapearOrganizacionDocs(oldPath, file.path);
+      })
+    );
     (0, import_obsidian22.addIcon)(ICONO_PLUGIN, ICONO_PLUGIN_SVG);
     this.addSettingTab(new GestorSettingTab(this.app, this));
     registerDashboard(this);
@@ -8112,6 +8185,43 @@ var GestorFuncionesPlugin = class extends import_obsidian22.Plugin {
       return;
     }
     new MostrarOcultarEpicasModal(this).open();
+  }
+  /**
+   * Cuando una nota cambia de ruta (reclasificar, mover o renombrar), reasigna sus
+   * referencias en "Documentos por segmentos" (orden y asignación heredada) para no
+   * perder la posición. El `segmento` del frontmatter ya viaja con la nota; esto
+   * conserva lo que se guarda por ruta, también entre sesiones. Soporta carpetas
+   * (remapea por prefijo) para renombrados de épica/historia.
+   */
+  async remapearOrganizacionDocs(oldPath, newPath) {
+    if (oldPath === newPath)
+      return;
+    const remap = (p) => {
+      if (p === oldPath)
+        return newPath;
+      if (p.startsWith(oldPath + "/"))
+        return newPath + p.slice(oldPath.length);
+      return null;
+    };
+    let cambios = false;
+    for (const d of Object.values(this.settings.organizacionDocs)) {
+      d.orden = d.orden.map((p) => {
+        const n = remap(p);
+        if (n !== null)
+          cambios = true;
+        return n != null ? n : p;
+      });
+      for (const key of Object.keys(d.asignacion)) {
+        const n = remap(key);
+        if (n !== null) {
+          d.asignacion[n] = d.asignacion[key];
+          delete d.asignacion[key];
+          cambios = true;
+        }
+      }
+    }
+    if (cambios)
+      await this.saveSettings();
   }
   /**
    * Refresca los tableros y vistas que respetan las épicas ocultas, para que el

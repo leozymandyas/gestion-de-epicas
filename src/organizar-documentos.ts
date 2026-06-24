@@ -26,6 +26,8 @@ interface DocCard {
 	nombre: string;
 	/** Nombre del tipo de documento (para el chip de color). */
 	tipoNombre: string;
+	/** Segmento al que pertenece el documento, según su frontmatter `segmento`. */
+	segmento?: string;
 }
 
 interface DragPayload {
@@ -76,17 +78,20 @@ export class OrganizarDocumentosView extends ItemView {
 			this.registerEvent(this.app.vault.on("create", refrescar));
 			this.registerEvent(this.app.vault.on("delete", refrescar));
 			this.registerEvent(this.app.vault.on("rename", refrescar));
+			// El segmento vive en el frontmatter: refrescar también al editarlo a mano.
+			this.registerEvent(this.app.metadataCache.on("changed", (file) => refrescar(file)));
 			this.restaurarUltimaEpica();
-			this.recargar();
+			void this.recargar();
 		} catch (e) {
 			console.error("gestion-de-epicas: error en onOpen (organizar documentos)", e);
 			this.render();
 		}
 	}
 
-	/** Relee desde disco y vuelve a renderizar. */
-	recargar(): void {
+	/** Relee desde disco, migra asignaciones heredadas y vuelve a renderizar. */
+	async recargar(): Promise<void> {
 		this.recolectar();
+		await this.migrarSegmentos();
 		this.render();
 	}
 
@@ -94,7 +99,7 @@ export class OrganizarDocumentosView extends ItemView {
 		if (this.renderTimer !== null) window.clearTimeout(this.renderTimer);
 		this.renderTimer = window.setTimeout(() => {
 			this.renderTimer = null;
-			this.recargar();
+			void this.recargar();
 		}, 150);
 	}
 
@@ -126,7 +131,11 @@ export class OrganizarDocumentosView extends ItemView {
 		const tipos = this.plugin.settings.documentos;
 		const agregar = (ref: FuncRef) => {
 			for (const doc of listDocumentos(this.app, ref, tipos)) {
-				this.docs.push({ file: doc.file, nombre: doc.nombre, tipoNombre: doc.tipoNombre });
+				const fm = this.app.metadataCache.getFileCache(doc.file)?.frontmatter as
+					| Record<string, unknown>
+					| undefined;
+				const segmento = fm?.segmento ? String(fm.segmento) : undefined;
+				this.docs.push({ file: doc.file, nombre: doc.nombre, tipoNombre: doc.tipoNombre, segmento });
 			}
 		};
 		agregar(ep);
@@ -157,11 +166,14 @@ export class OrganizarDocumentosView extends ItemView {
 		return d;
 	}
 
-	/** Carril donde vive un documento; si su carril ya no existe, va al de "Todos". */
-	private carrilDe(path: string): string {
-		const d = this.datos();
-		const lane = d.asignacion[path];
-		if (lane && lane !== CARRIL_DOCS_TODOS && d.carriles.some((c) => c.id === lane)) return lane;
+	/** Carril donde se muestra un documento, según su frontmatter `segmento`. Si ese
+	 * segmento ya no existe (se borró el carril), cae en "Documentos sin segmentos"
+	 * aunque el documento conserve la propiedad. */
+	private carrilDe(card: DocCard): string {
+		if (card.segmento) {
+			const c = this.datos().carriles.find((x) => x.nombre === card.segmento);
+			if (c) return c.id;
+		}
 		return CARRIL_DOCS_TODOS;
 	}
 
@@ -211,7 +223,7 @@ export class OrganizarDocumentosView extends ItemView {
 		epicaSel.addEventListener("change", () => {
 			this.epicaSlug = epicaSel.value;
 			this.guardarUltimaEpica();
-			this.recargar();
+			void this.recargar();
 		});
 
 		if (this.epicaActual()) {
@@ -221,7 +233,7 @@ export class OrganizarDocumentosView extends ItemView {
 
 		const recargar = barra.createEl("button", { text: "Recargar", cls: "gf-roadmap-recargar" });
 		recargar.setAttr("title", "Releer las notas desde el disco");
-		recargar.addEventListener("click", () => this.recargar());
+		recargar.addEventListener("click", () => void this.recargar());
 
 		if (!this.epicaActual()) {
 			cont.createDiv({ cls: "gf-kanban-vacio", text: "Selecciona una épica." });
@@ -266,7 +278,7 @@ export class OrganizarDocumentosView extends ItemView {
 				return;
 			}
 			const payload = leerPayload(e);
-			if (payload) this.soltar(payload.path, carril.id, null);
+			if (payload) void this.soltar(payload.path, carril.id, null);
 		});
 
 		const header = colEl.createDiv({ cls: "gf-orgdocs-header" });
@@ -285,7 +297,7 @@ export class OrganizarDocumentosView extends ItemView {
 			});
 		}
 		header.createEl("span", { cls: "gf-kanban-titulo", text: carril.nombre });
-		const cards = this.ordenar(this.docs.filter((c) => this.carrilDe(c.file.path) === carril.id));
+		const cards = this.ordenar(this.docs.filter((c) => this.carrilDe(c) === carril.id));
 		header.createEl("span", { cls: "gf-kanban-conteo", text: String(cards.length) });
 
 		// Los carriles personalizados se pueden renombrar y eliminar.
@@ -337,7 +349,7 @@ export class OrganizarDocumentosView extends ItemView {
 			el.removeClass("gf-drop-card");
 			const payload = leerPayload(e);
 			if (payload && payload.path !== card.file.path) {
-				this.soltar(payload.path, carrilId, card.file.path);
+				void this.soltar(payload.path, carrilId, card.file.path);
 			}
 		});
 
@@ -373,15 +385,51 @@ export class OrganizarDocumentosView extends ItemView {
 		d.orden = orden;
 	}
 
-	/** Asigna el carril del documento y/o lo reordena dentro de él. */
-	private soltar(path: string, carrilId: string, beforeKey: string | null): void {
-		if (!this.docs.some((c) => c.file.path === path)) return;
-		const d = this.datosEditable();
+	/** Mueve el documento al segmento del carril (escribe `segmento` en su
+	 * frontmatter) y lo reordena dentro de él. */
+	private async soltar(path: string, carrilId: string, beforeKey: string | null): Promise<void> {
+		const card = this.docs.find((c) => c.file.path === path);
+		if (!card) return;
 		this.posicionar(path, beforeKey);
-		if (carrilId === CARRIL_DOCS_TODOS) delete d.asignacion[path];
-		else d.asignacion[path] = carrilId;
-		void this.plugin.saveSettings();
+		const nombre =
+			carrilId === CARRIL_DOCS_TODOS
+				? null
+				: this.datos().carriles.find((c) => c.id === carrilId)?.nombre ?? null;
+		await this.escribirSegmento(card.file, nombre);
+		card.segmento = nombre ?? undefined;
+		await this.plugin.saveSettings();
 		this.render();
+	}
+
+	/** Escribe (o borra, con null) la propiedad `segmento` del documento. */
+	private async escribirSegmento(file: TFile, nombre: string | null): Promise<void> {
+		await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+			if (nombre) fm.segmento = nombre;
+			else delete fm.segmento;
+		});
+	}
+
+	/** Migra las asignaciones heredadas (guardadas en settings) al frontmatter, una
+	 * sola vez por documento; después limpia la asignación heredada. Conserva la
+	 * compatibilidad con organizaciones creadas antes de mover el segmento al .md. */
+	private async migrarSegmentos(): Promise<void> {
+		const d = this.plugin.settings.organizacionDocs[this.epicaSlug];
+		if (!d || Object.keys(d.asignacion).length === 0) return;
+		let cambios = false;
+		for (const card of this.docs) {
+			const legacy = d.asignacion[card.file.path];
+			if (!legacy) continue;
+			if (!card.segmento) {
+				const nombre = d.carriles.find((c) => c.id === legacy)?.nombre;
+				if (nombre) {
+					await this.escribirSegmento(card.file, nombre);
+					card.segmento = nombre;
+				}
+			}
+			delete d.asignacion[card.file.path];
+			cambios = true;
+		}
+		if (cambios) await this.plugin.saveSettings();
 	}
 
 	// ----- Carriles -----
@@ -422,23 +470,39 @@ export class OrganizarDocumentosView extends ItemView {
 
 	private renombrarCarril(carril: DocCarril): void {
 		new NombreCarrilModal(this.plugin, "Renombrar segmento", carril.nombre, (nombre) => {
-			const d = this.datosEditable();
-			const c = d.carriles.find((x) => x.id === carril.id);
-			if (c) c.nombre = nombre;
-			void this.plugin.saveSettings();
-			this.render();
+			void (async () => {
+				const anterior = carril.nombre;
+				const d = this.datosEditable();
+				const c = d.carriles.find((x) => x.id === carril.id);
+				if (c) c.nombre = nombre;
+				await this.plugin.saveSettings();
+				// Propaga el nuevo nombre al frontmatter de los documentos del segmento.
+				for (const card of this.docs) {
+					if (card.segmento === anterior) {
+						await this.escribirSegmento(card.file, nombre);
+						card.segmento = nombre;
+					}
+				}
+				this.render();
+			})();
 		}).open();
 	}
 
 	private eliminarCarril(carril: DocCarril): void {
 		const d = this.datosEditable();
 		d.carriles = d.carriles.filter((c) => c.id !== carril.id);
-		// Los documentos del carril eliminado vuelven a "Documentos sin segmentos".
-		for (const [path, lane] of Object.entries(d.asignacion)) {
-			if (lane === carril.id) delete d.asignacion[path];
-		}
-		void this.plugin.saveSettings();
-		this.render();
+		void (async () => {
+			// Al borrar el segmento se quita también la propiedad `segmento` de sus
+			// documentos: pasan a "Documentos sin segmentos" sin dato huérfano.
+			for (const card of this.docs) {
+				if (card.segmento === carril.nombre) {
+					await this.escribirSegmento(card.file, null);
+					card.segmento = undefined;
+				}
+			}
+			await this.plugin.saveSettings();
+			this.render();
+		})();
 	}
 }
 

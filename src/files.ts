@@ -41,12 +41,20 @@ export async function guardarEtiquetasEpica(
 	});
 }
 
+/** Clave de frontmatter de la etiqueta asignada a una historia. Se nombra
+ * `etiqueta-historia` (no `etiquetas`) para no confundirla con las etiquetas
+ * nativas de Obsidian, p. ej. al consultarla con una IA. */
+export const FM_ETIQUETA_HISTORIA = "etiqueta-historia";
+/** Clave heredada (antes de renombrarla); se lee como respaldo y se migra. */
+export const FM_ETIQUETA_HISTORIA_LEGACY = "etiquetas";
+
 /** Nombres de las etiquetas asignadas a una historia (en su frontmatter). */
 export function leerEtiquetasHistoria(app: App, file: TFile): string[] {
 	const fm = app.metadataCache.getFileCache(file)?.frontmatter as
 		| Record<string, unknown>
 		| undefined;
-	return Array.isArray(fm?.etiquetas) ? (fm.etiquetas as unknown[]).map(String) : [];
+	const valor = fm?.[FM_ETIQUETA_HISTORIA] ?? fm?.[FM_ETIQUETA_HISTORIA_LEGACY];
+	return Array.isArray(valor) ? (valor as unknown[]).map(String) : [];
 }
 
 /** Guarda las etiquetas asignadas a una historia (lista de nombres). */
@@ -56,7 +64,8 @@ export async function guardarEtiquetasHistoria(
 	nombres: string[]
 ): Promise<void> {
 	await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-		fm.etiquetas = nombres;
+		fm[FM_ETIQUETA_HISTORIA] = nombres;
+		delete fm[FM_ETIQUETA_HISTORIA_LEGACY];
 	});
 }
 
@@ -189,17 +198,25 @@ export async function migrarCarpetasHistorias(app: App): Promise<void> {
 	];
 	for (const ep of epicas2) {
 		for (const h of listFuncionalidadesDe(app, ep.folder)) {
-			const tipo = (
-				app.metadataCache.getFileCache(h.file)?.frontmatter as Record<string, unknown> | undefined
-			)?.tipo;
-			if (tipo === "funcionalidad") {
-				try {
-					await app.fileManager.processFrontMatter(h.file, (fm: Record<string, unknown>) => {
-						fm.tipo = "historia";
-					});
-				} catch (e) {
-					console.error(e);
-				}
+			const fm = app.metadataCache.getFileCache(h.file)?.frontmatter as
+				| Record<string, unknown>
+				| undefined;
+			const tipoLegacy = fm?.tipo === "funcionalidad";
+			// Migra la etiqueta de la historia a la clave nueva `etiqueta-historia`.
+			const etqLegacy =
+				fm?.[FM_ETIQUETA_HISTORIA_LEGACY] !== undefined &&
+				fm?.[FM_ETIQUETA_HISTORIA] === undefined;
+			if (!tipoLegacy && !etqLegacy) continue;
+			try {
+				await app.fileManager.processFrontMatter(h.file, (f: Record<string, unknown>) => {
+					if (tipoLegacy) f.tipo = "historia";
+					if (etqLegacy) {
+						f[FM_ETIQUETA_HISTORIA] = f[FM_ETIQUETA_HISTORIA_LEGACY];
+						delete f[FM_ETIQUETA_HISTORIA_LEGACY];
+					}
+				});
+			} catch (e) {
+				console.error(e);
 			}
 		}
 	}
@@ -889,7 +906,7 @@ export async function eliminarColaborador(
 	}
 }
 
-/** Etiquetas de épica: actualiza el frontmatter `etiquetas` de sus historias. */
+/** Etiquetas de épica: actualiza el frontmatter `etiqueta-historia` de sus historias. */
 export async function renombrarEtiquetaHistoria(
 	app: App,
 	epica: FuncRef,
@@ -904,6 +921,8 @@ export async function renombrarEtiquetaHistoria(
 	}
 }
 
+/** Etiquetas de épica: quita la etiqueta del frontmatter `etiqueta-historia` de
+ * todas las historias que la tengan (al borrar la etiqueta). */
 export async function eliminarEtiquetaHistoria(
 	app: App,
 	epica: FuncRef,

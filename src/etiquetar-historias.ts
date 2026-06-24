@@ -299,9 +299,11 @@ export class EtiquetarHistoriasView extends ItemView {
 		new ConfirmacionModal(
 			this.plugin,
 			"Eliminar etiqueta",
-			`¿Eliminar la etiqueta "${nombre}"? Se quitará de la épica y de todas las historias que la tengan.`,
+			`¿Eliminar la etiqueta "${nombre}"? Se quitará de la épica y de las historias que la tengan.`,
 			"Eliminar",
 			async () => {
+				// Se elimina de la épica y se quita también del frontmatter de las
+				// historias que la tengan (no queda dato huérfano).
 				const nuevas = this.etiquetas.filter((e) => e.nombre !== nombre);
 				await guardarEtiquetasEpica(this.app, ep, nuevas);
 				await eliminarEtiquetaHistoria(this.app, ep, nombre);

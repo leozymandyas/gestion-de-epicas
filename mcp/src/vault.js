@@ -210,7 +210,9 @@ async function refDesdeCarpeta(carpetaAbs, slug, estado) {
 		const { data } = await leerMd(mainAbs);
 		if (data.nombre) nombre = String(data.nombre);
 		if (data.estado) estadoFm = String(data.estado);
-		if (Array.isArray(data.etiquetas)) etiquetas = data.etiquetas.map(String);
+		// `etiqueta-historia` (clave actual) con respaldo a la heredada `etiquetas`.
+		const etq = data["etiqueta-historia"] ?? data.etiquetas;
+		if (Array.isArray(etq)) etiquetas = etq.map(String);
 	} catch {}
 	return { slug, nombre, estado, estadoFrontmatter: estadoFm, etiquetas, folder: carpetaAbs, file: mainAbs };
 }
@@ -572,7 +574,9 @@ export async function etiquetarHistoria(vault, rutaRel, etiquetas) {
 	if (!(await esArchivo(abs))) throw new Error(`No existe la nota: ${rutaRel}`);
 	const lista = (etiquetas || []).map(String);
 	await actualizarFrontmatter(abs, (d) => {
-		d.etiquetas = lista;
+		// Clave nueva `etiqueta-historia`; se elimina la heredada `etiquetas`.
+		d["etiqueta-historia"] = lista;
+		delete d.etiquetas;
 	});
 	return { ruta: rutaRel, etiquetas: lista };
 }

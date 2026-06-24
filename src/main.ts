@@ -130,6 +130,14 @@ export default class GestorFuncionesPlugin extends Plugin {
 		// Migra la carpeta heredada "funcionalidades" → "historias" en cada épica.
 		this.app.workspace.onLayoutReady(() => void migrarCarpetasHistorias(this.app));
 
+		// Cuando una nota cambia de ruta (reclasificar, mover, renombrar), conserva
+		// su orden y asignación heredada en "Documentos por segmentos".
+		this.registerEvent(
+			this.app.vault.on("rename", (file, oldPath) => {
+				void this.remapearOrganizacionDocs(oldPath, file.path);
+			})
+		);
+
 		addIcon(ICONO_PLUGIN, ICONO_PLUGIN_SVG);
 
 		this.addSettingTab(new GestorSettingTab(this.app, this));
@@ -517,6 +525,39 @@ export default class GestorFuncionesPlugin extends Plugin {
 			return;
 		}
 		new MostrarOcultarEpicasModal(this).open();
+	}
+
+	/**
+	 * Cuando una nota cambia de ruta (reclasificar, mover o renombrar), reasigna sus
+	 * referencias en "Documentos por segmentos" (orden y asignación heredada) para no
+	 * perder la posición. El `segmento` del frontmatter ya viaja con la nota; esto
+	 * conserva lo que se guarda por ruta, también entre sesiones. Soporta carpetas
+	 * (remapea por prefijo) para renombrados de épica/historia.
+	 */
+	private async remapearOrganizacionDocs(oldPath: string, newPath: string): Promise<void> {
+		if (oldPath === newPath) return;
+		const remap = (p: string): string | null => {
+			if (p === oldPath) return newPath;
+			if (p.startsWith(oldPath + "/")) return newPath + p.slice(oldPath.length);
+			return null;
+		};
+		let cambios = false;
+		for (const d of Object.values(this.settings.organizacionDocs)) {
+			d.orden = d.orden.map((p) => {
+				const n = remap(p);
+				if (n !== null) cambios = true;
+				return n ?? p;
+			});
+			for (const key of Object.keys(d.asignacion)) {
+				const n = remap(key);
+				if (n !== null) {
+					d.asignacion[n] = d.asignacion[key];
+					delete d.asignacion[key];
+					cambios = true;
+				}
+			}
+		}
+		if (cambios) await this.saveSettings();
 	}
 
 	/**

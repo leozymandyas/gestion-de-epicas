@@ -15,6 +15,9 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historia completa + tags, para leer el mensaje del tag anotado.
+          fetch-depth: 0
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -39,9 +42,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-
-          gh release create "$tag" \
-            --title="$tag" \
-            --generate-notes \
-            --draft \
-            main.js manifest.json styles.css
+          # Usa el mensaje del tag anotado como notas del release; si el tag no
+          # tiene mensaje (tag ligero), genera notas automáticas.
+          notes="$(git for-each-ref "refs/tags/$tag" --format='%(contents)')"
+          if [ -n "$notes" ]; then
+            printf '%s\n' "$notes" > "$RUNNER_TEMP/notes.md"
+            gh release create "$tag" \
+              --title="$tag" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              --draft \
+              main.js manifest.json styles.css
+          else
+            gh release create "$tag" \
+              --title="$tag" \
+              --generate-notes \
+              --draft \
+              main.js manifest.json styles.css
+          fi
